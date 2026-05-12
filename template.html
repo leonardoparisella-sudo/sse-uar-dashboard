@@ -160,6 +160,7 @@ tr.collected-row td{background:#f0fdf4;opacity:.7}
       <div class="hdr-sub" id="hdrSub">Loading…</div>
     </div>
     <div class="hdr-btns">
+      <span id="autoRefreshBadge" style="font-size:11px;opacity:.75;padding:4px 10px;background:rgba(255,255,255,.12);border-radius:6px;white-space:nowrap" title="Auto-checks for a newer version every 5 minutes">🔄 <span id="lastCheckedTxt">checking…</span></span>
       <button class="hdr-btn hdr-btn-ghost" onclick="showInfo()">ℹ Info</button>
       <button class="hdr-btn hdr-btn-ghost" onclick="downloadFiltered()">⬇ Filtered CSV</button>
       <button class="hdr-btn hdr-btn-solid" onclick="downloadAll()">⬇ All CSV</button>
@@ -863,6 +864,66 @@ function showToast(msg){
   t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 2800);
 }
+
+// ── Auto-refresh: checks GitHub for a newer build every 5 minutes ──────────
+// Compares the current page's Last-Modified header against a HEAD request
+// to the same URL. If a newer version is deployed, shows a banner and reloads.
+(function autoRefresh(){
+  const CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
+  const CURRENT_URL = location.href;
+  // Only runs when served from a real URL (not local file://)
+  if (!CURRENT_URL.startsWith('http')) return;
+
+  // Record when this page was built (captured at load time via Last-Modified)
+  let pageLastModified = document.lastModified ? new Date(document.lastModified).getTime() : Date.now();
+
+  function fmtTime(d){ return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }
+
+  function updateBadge(txt){ const el = document.getElementById('lastCheckedTxt'); if(el) el.textContent = txt; }
+
+  function checkForUpdate(){
+    const req = new XMLHttpRequest();
+    req.open('HEAD', CURRENT_URL + '?_=' + Date.now(), true);
+    req.onreadystatechange = function(){
+      if(req.readyState !== 4) return;
+      updateBadge('checked ' + fmtTime(new Date()));
+      if(req.status !== 200) return;
+      const serverModified = req.getResponseHeader('Last-Modified');
+      if(!serverModified) return;
+      const serverTime = new Date(serverModified).getTime();
+      if(serverTime > pageLastModified + 30000){ // >30s newer = new build
+        showUpdateBanner();
+      }
+    };
+    req.send();
+  }
+
+  function showUpdateBanner(){
+    // Don't show twice
+    if(document.getElementById('updateBanner')) return;
+    const banner = document.createElement('div');
+    banner.id = 'updateBanner';
+    banner.style.cssText = `
+      position:fixed;top:0;left:0;right:0;z-index:9999;
+      background:linear-gradient(90deg,#166534,#15803d);
+      color:white;text-align:center;padding:10px 16px;
+      font-size:13px;font-weight:700;display:flex;align-items:center;
+      justify-content:center;gap:14px;box-shadow:0 2px 10px rgba(0,0,0,.3)
+    `;
+    banner.innerHTML = `
+      <span>🔄 A newer version of this dashboard is available.</span>
+      <button onclick="location.reload()" style="background:white;color:#166534;border:none;padding:5px 14px;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px">Refresh Now</button>
+      <button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,.2);color:white;border:none;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px">Dismiss</button>
+    `;
+    document.body.prepend(banner);
+    updateBadge('update available!');
+  }
+
+  // Initial check after 30s, then every 5 min
+  setTimeout(checkForUpdate, 30000);
+  setInterval(checkForUpdate, CHECK_INTERVAL);
+  updateBadge('auto-refresh on');
+})();
 </script>
 </body>
 </html>
