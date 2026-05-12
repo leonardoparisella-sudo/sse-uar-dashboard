@@ -4,9 +4,9 @@
 
 ## 🚀 Open the Dashboard
 
-**→ [Open Dashboard (Walmart login required)](https://gecgithub01.walmart.com/lparise/sse-uar-dashboard/raw/master/index.html)**
+**→ [Open Dashboard](https://gecgithub01.walmart.com/pages/lparise/sse-uar-dashboard/)**
 
-> Works in any browser. No installation needed — just click and open.
+> Works in any browser on the Walmart network. No installation needed — just click and open.
 
 ---
 
@@ -66,6 +66,7 @@ Builds fresh from BigQuery (~2-3 min), commits, and pushes to both repos automat
 
 | | URL |
 |--|--|
+| **Dashboard (live)** | https://gecgithub01.walmart.com/pages/lparise/sse-uar-dashboard/ |
 | **Enterprise repo (primary)** | https://gecgithub01.walmart.com/lparise/sse-uar-dashboard |
 | **GitHub mirror + Pages** | https://leonardoparisella-sudo.github.io/sse-uar-dashboard/ |
 
