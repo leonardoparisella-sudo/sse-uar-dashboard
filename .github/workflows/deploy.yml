@@ -1,0 +1,77 @@
+name: Build & Deploy SSE UAR Dashboard
+
+on:
+  # Run on every push to master
+  push:
+    branches: [master]
+  # Run on a schedule — every Monday at 6 AM CT (11 AM UTC)
+  schedule:
+    - cron: '0 11 * * 1'
+  # Allow manual trigger from GitHub Actions UI
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Python setup ──────────────────────────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install google-cloud-bigquery pandas
+
+      # ── GCP auth ──────────────────────────────────────────────────────────
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: infosec-compliance-auditboard
+
+      # ── Build dashboard ───────────────────────────────────────────────────
+      # Note: MAR CSV files are not available in CI (too large for GitHub).
+      # The dashboard will build with BQ data only — evidence CSVs will show
+      # "No MAR data found" placeholders until you set up MAR data hosting.
+      - name: Build dashboard HTML
+        run: |
+          python build_dashboard.py
+        env:
+          GOOGLE_CLOUD_PROJECT: infosec-compliance-auditboard
+          # Skip MAR files in CI — set to empty to use BQ-only mode
+          SSE_UAR_CI_MODE: "true"
+
+      # ── Prepare Pages output ──────────────────────────────────────────────
+      - name: Prepare GitHub Pages output
+        run: |
+          mkdir -p _site
+          cp sse_uar_dashboard.html _site/index.html
+          # Stamp the build time in a small metadata file
+          echo "{\"built_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\", \"quarter\": \"FY27_Q1\"}" > _site/meta.json
+
+      # ── Deploy to GitHub Pages ─────────────────────────────────────────────
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
