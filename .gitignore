@@ -1,0 +1,15 @@
+# Large MAR evidence files (local SharePoint sync, ~752 MB)
+*.csv
+
+# Generated dashboard output
+sse_uar_dashboard.html
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# OS
+.DS_Store
+Thumbs.db

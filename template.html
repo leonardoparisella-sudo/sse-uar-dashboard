@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>SSE UAR — Evidence Collection Dashboard</title>
+<style>
+/* ── Reset & base ────────────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --blue:#0053e2;--blue2:#1a6ef5;--yellow:#ffc220;
+  --green:#166534;--green-bg:#dcfce7;
+  --red:#dc2626;--red-bg:#fee2e2;
+  --amber:#92400e;--amber-bg:#fef3c7;
+  --purple:#6b21a8;--purple-bg:#f3e8ff;
+  --gray:#374151;--gray-bg:#f9fafb;--border:#e5e7eb;
+  --muted:#6b7280;--text:#111827;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--gray-bg);color:var(--text);font-size:13px}
+
+/* ── Header ──────────────────────────────────────────────────── */
+header{background:linear-gradient(135deg,var(--blue),var(--blue2));color:white;padding:14px 24px}
+.hdr-row{max-width:1600px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.hdr-title{font-size:18px;font-weight:800;letter-spacing:-.3px}
+.hdr-sub{font-size:11px;opacity:.8;margin-top:2px}
+.hdr-btns{display:flex;gap:8px;flex-wrap:wrap}
+.hdr-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .15s;text-decoration:none}
+.hdr-btn-ghost{background:rgba(255,255,255,.18);color:white}.hdr-btn-ghost:hover{background:rgba(255,255,255,.3)}
+.hdr-btn-solid{background:white;color:var(--blue)}.hdr-btn-solid:hover{background:#f0f4ff}
+
+/* ── Tiles ───────────────────────────────────────────────────── */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;padding:16px 24px;max-width:1600px;margin:0 auto}
+.tile{background:white;border:1px solid var(--border);border-radius:10px;padding:14px 16px;text-align:center;cursor:pointer;transition:all .15s;user-select:none}
+.tile:hover{border-color:var(--blue);box-shadow:0 0 0 2px rgba(0,83,226,.12)}
+.tile-num{font-size:26px;font-weight:800;line-height:1}
+.tile-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
+.tile-green .tile-num{color:var(--green)}
+.tile-red   .tile-num{color:var(--red)}
+.tile-amber .tile-num{color:var(--amber)}
+.tile-blue  .tile-num{color:var(--blue)}
+
+/* ── Main layout ─────────────────────────────────────────────── */
+.main{max-width:1600px;margin:0 auto;padding:0 24px 32px}
+
+/* ── Filters bar ─────────────────────────────────────────────── */
+.filters-bar{background:white;border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin:12px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.filter-group{display:flex;align-items:center;gap:6px}
+.filter-group label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;white-space:nowrap}
+.fctl{padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:white;cursor:pointer}
+.fctl:focus{outline:2px solid var(--blue);outline-offset:1px}
+.search-wrap{flex:1;min-width:180px;position:relative}
+.search-wrap input{width:100%;padding:6px 10px 6px 30px;border:1px solid var(--border);border-radius:6px;font-size:12px}
+.search-wrap svg{position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--muted)}
+.result-count{font-size:11px;color:var(--muted);white-space:nowrap;padding:5px 0}
+
+/* ── Tabs ────────────────────────────────────────────────────── */
+.tabs{display:flex;gap:2px;border-bottom:2px solid var(--border);margin:16px 0 0}
+.tab-btn{padding:9px 18px;border:1px solid transparent;border-bottom:none;border-radius:8px 8px 0 0;cursor:pointer;font-size:13px;font-weight:600;background:transparent;color:var(--muted);white-space:nowrap}
+.tab-btn.active{background:white;border-color:var(--border);color:var(--blue);border-bottom:2px solid white;margin-bottom:-2px}
+.tab-pane{display:none;background:white;border:1px solid var(--border);border-top:none;border-radius:0 0 10px 10px}
+.tab-pane.active{display:block}
+
+/* ── Progress bar ────────────────────────────────────────────── */
+.progress-wrap{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.progress-bar{flex:1;height:7px;background:#e5e7eb;border-radius:4px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,#22c55e,#16a34a);border-radius:4px;transition:width .4s ease}
+.progress-txt{font-size:11px;color:var(--muted);white-space:nowrap}
+.reset-btn{font-size:11px;color:var(--red);background:none;border:1px solid #fca5a5;border-radius:5px;padding:3px 9px;cursor:pointer}
+.reset-btn:hover{background:var(--red-bg)}
+
+/* ── Table ───────────────────────────────────────────────────── */
+.tbl-wrap{overflow-x:auto;max-height:580px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{position:sticky;top:0;background:#f8fafc;padding:8px 10px;text-align:left;font-weight:700;border-bottom:2px solid var(--border);white-space:nowrap;z-index:2;color:var(--gray)}
+th.sortable{cursor:pointer;user-select:none}
+th.sortable:hover{background:#eff6ff;color:var(--blue)}
+th .sort-icon{margin-left:4px;opacity:.4;font-size:10px}
+td{padding:7px 10px;border-bottom:1px solid #f3f4f6;vertical-align:middle}
+tr:hover td{background:#fafbfc;cursor:pointer}
+tr.collected-row td{background:#f0fdf4;opacity:.7}
+.col-apm{font-family:Consolas,monospace;font-size:11px;font-weight:700;color:var(--blue);white-space:nowrap}
+.col-app{max-width:160px;word-break:break-word;font-weight:500;line-height:1.3}
+.col-owner{max-width:140px}
+.col-owner a{color:var(--blue);text-decoration:none;font-size:11px}
+.col-owner a:hover{text-decoration:underline}
+.col-adgroups{max-width:160px}
+.col-mar{max-width:180px;font-size:11px;color:var(--muted);font-style:italic;line-height:1.3}
+.col-users{text-align:center;font-weight:700;color:var(--green)}
+.col-actions{white-space:nowrap}
+.no-data{text-align:center;padding:40px;color:var(--muted);font-size:14px}
+
+/* ── Badges & chips ──────────────────────────────────────────── */
+.chip{display:inline-block;padding:1px 7px;border-radius:10px;font-size:10px;font-family:Consolas,monospace;font-weight:600;margin:1px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
+.chip-green{background:var(--green-bg);color:var(--green);border:1px solid #86efac}
+.chip-red  {background:var(--red-bg);color:var(--red);border:1px solid #fca5a5}
+.chip-gray {background:#f3f4f6;color:var(--muted);border:1px solid var(--border)}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap;vertical-align:middle}
+.b-green  {background:var(--green-bg);color:var(--green)}
+.b-red    {background:var(--red-bg);color:var(--red)}
+.b-amber  {background:var(--amber-bg);color:var(--amber)}
+.b-blue   {background:#dbeafe;color:#1d4ed8}
+.b-purple {background:var(--purple-bg);color:var(--purple)}
+.b-gray   {background:#f3f4f6;color:var(--muted)}
+.b-pci    {background:#fef2f2;color:var(--red);border:1px solid #fca5a5}
+.b-sox    {background:#fefce8;color:var(--amber);border:1px solid #fde047}
+.due-past {color:var(--red);font-weight:700}
+.due-ok   {color:var(--green)}
+
+/* ── Action buttons ──────────────────────────────────────────── */
+.act-btn{display:inline-flex;align-items:center;gap:3px;padding:3px 9px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;border:none;text-decoration:none;transition:all .12s;white-space:nowrap;line-height:1.4}
+.btn-csv{background:#0053e2;color:white}.btn-csv:hover{background:#0041b8;transform:translateY(-1px)}
+.btn-ab {background:#f97316;color:white}.btn-ab:hover{background:#ea580c}
+.btn-ab-fb{background:#9ca3af;color:white}.btn-ab-fb:hover{background:#6b7280}
+.btn-email{background:#8b5cf6;color:white}.btn-email:hover{background:#7c3aed}
+.cb-done{width:16px;height:16px;cursor:pointer;accent-color:var(--green)}
+
+/* ── Side drawer ─────────────────────────────────────────────── */
+.drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;opacity:0;visibility:hidden;transition:all .2s}
+.drawer-overlay.open{opacity:1;visibility:visible}
+.drawer{position:fixed;top:0;right:-480px;width:480px;height:100vh;background:white;z-index:501;transition:right .25s ease;overflow-y:auto;box-shadow:-4px 0 20px rgba(0,0,0,.15);display:flex;flex-direction:column}
+.drawer-overlay.open .drawer{right:0}
+.drawer-hdr{padding:20px 20px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:8px;position:sticky;top:0;background:white;z-index:1}
+.drawer-title{font-size:15px;font-weight:700;line-height:1.3}
+.drawer-sub{font-size:11px;color:var(--muted);margin-top:3px}
+.close-drawer{background:none;border:none;cursor:pointer;font-size:22px;color:var(--muted);line-height:1;padding:2px 6px;border-radius:5px}
+.close-drawer:hover{background:var(--gray-bg);color:var(--text)}
+.drawer-body{padding:20px;flex:1}
+.drow{margin-bottom:16px}
+.drow-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:5px}
+.drow-val{font-size:13px;line-height:1.5}
+.drow-summary{font-size:12px;line-height:1.6;color:var(--gray);background:#f9fafb;border-left:3px solid var(--blue);padding:10px 12px;border-radius:0 6px 6px 0;white-space:pre-wrap;word-break:break-word}
+.chip-row{display:flex;flex-wrap:wrap;gap:4px}
+
+/* ── Info modal ──────────────────────────────────────────────── */
+.info-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;display:none;overflow-y:auto}
+.info-overlay.open{display:block}
+.info-box{background:white;max-width:720px;margin:40px auto;border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.info-hdr{background:linear-gradient(135deg,#4f46e5,#7c3aed);padding:24px 28px;color:white;display:flex;justify-content:space-between;align-items:center}
+.info-close{background:rgba(255,255,255,.2);border:none;color:white;width:32px;height:32px;border-radius:7px;font-size:18px;cursor:pointer}
+.info-sec{padding:20px 28px;border-bottom:1px solid #f1f5f9}
+.info-sec:last-child{border:none}
+.info-sec h3{font-size:14px;font-weight:700;margin-bottom:10px}
+.info-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.info-tbl th{background:#f8fafc;padding:7px 10px;font-weight:600;text-align:left;border-bottom:1px solid var(--border)}
+.info-tbl td{padding:7px 10px;border-bottom:1px solid #f9fafb;vertical-align:top}
+
+/* ── Toast ───────────────────────────────────────────────────── */
+.toast{position:fixed;bottom:24px;right:24px;background:#166534;color:white;padding:12px 20px;border-radius:8px;font-size:13px;font-weight:600;transform:translateY(60px);opacity:0;transition:all .25s;z-index:999}
+.toast.show{transform:translateY(0);opacity:1}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────── -->
+<header>
+  <div class="hdr-row">
+    <div>
+      <div class="hdr-title">🔐 SSE UAR — Evidence Collection Dashboard</div>
+      <div class="hdr-sub" id="hdrSub">Loading…</div>
+    </div>
+    <div class="hdr-btns">
+      <button class="hdr-btn hdr-btn-ghost" onclick="showInfo()">ℹ Info</button>
+      <button class="hdr-btn hdr-btn-ghost" onclick="downloadFiltered()">⬇ Filtered CSV</button>
+      <button class="hdr-btn hdr-btn-solid" onclick="downloadAll()">⬇ All CSV</button>
+    </div>
+  </div>
+</header>
+
+<!-- ── Summary Tiles ────────────────────────────────────────────────── -->
+<div class="tiles">
+  <div class="tile tile-blue" onclick="setTab('close')">
+    <div class="tile-num" id="statTotal">—</div>
+    <div class="tile-lbl">Total APMs</div>
+  </div>
+  <div class="tile tile-green" onclick="setTab('close')">
+    <div class="tile-num" id="statClose">—</div>
+    <div class="tile-lbl">✅ Can Close</div>
+  </div>
+  <div class="tile tile-amber" onclick="setTab('issue')">
+    <div class="tile-num" id="statPartial">—</div>
+    <div class="tile-lbl">⚡ Partial</div>
+  </div>
+  <div class="tile tile-red" onclick="setTab('issue')">
+    <div class="tile-num" id="statIssue">—</div>
+    <div class="tile-lbl">❌ Issue Finding</div>
+  </div>
+  <div class="tile" onclick="filterByDue()">
+    <div class="tile-num" style="color:#dc2626" id="statDue">—</div>
+    <div class="tile-lbl">⏱ Past Due</div>
+  </div>
+</div>
+
+<div class="main">
+
+<!-- ── Filters ──────────────────────────────────────────────────────── -->
+<div class="filters-bar">
+  <div class="filter-group search-wrap">
+    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+    <input type="text" id="searchInput" placeholder="Search APM, app, owner, AD group…" oninput="debounceFilter()"/>
+    <button id="searchClear" onclick="clearSearch()" style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;line-height:1;padding:2px 4px" title="Clear search">×</button>
+  </div>
+  <div class="filter-group">
+    <label>VBU</label>
+    <select class="fctl" id="fVbu" onchange="applyFilters()">
+      <option value="">All VBUs</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>SLA</label>
+    <select class="fctl" id="fSla" onchange="applyFilters()">
+      <option value="">All SLA</option>
+      <option value="Compliant">Compliant</option>
+      <option value="Non-Compliant">Non-Compliant</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Sensitivity</label>
+    <select class="fctl" id="fSens" onchange="applyFilters()">
+      <option value="">All</option>
+      <option value="highly_sensitive">🔴 Highly Sensitive</option>
+      <option value="sensitive">🟡 Sensitive</option>
+      <option value="non_sensitive">🟢 Non-Sensitive</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Due</label>
+    <select class="fctl" id="fDue" onchange="applyFilters()">
+      <option value="">All</option>
+      <option value="Past due">Past Due</option>
+      <option value="On time">On Time</option>
+    </select>
+  </div>
+  <div class="filter-group" id="quarterGroup">
+    <label>Quarter</label>
+    <select class="fctl" id="fQuarter" onchange="applyFilters()">
+      <option value="">All Quarters</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>SSE Reviewer</label>
+    <select class="fctl" id="fSseReviewer" onchange="applyFilters()">
+      <option value="">All Reviewers</option>
+    </select>
+  </div>
+  <span class="result-count" id="resultCount"></span>
+  <button id="clearFiltersBtn" onclick="clearAllFilters()" style="display:none;padding:5px 12px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:white;cursor:pointer;color:var(--muted);white-space:nowrap" title="Clear all filters">✕ Clear filters</button>
+</div>
+
+<!-- ── Tabs ─────────────────────────────────────────────────────────── -->
+<div class="tabs">
+  <button class="tab-btn active" id="tabClose" onclick="setTab('close')">
+    ✅ Can Close <span id="cntClose" style="background:#dcfce7;color:#166534;padding:1px 7px;border-radius:8px;font-size:11px;margin-left:4px">0</span>
+  </button>
+  <button class="tab-btn" id="tabIssue" onclick="setTab('issue')">
+    ❌ Issue / Needs Work <span id="cntIssue" style="background:#fee2e2;color:#dc2626;padding:1px 7px;border-radius:8px;font-size:11px;margin-left:4px">0</span>
+  </button>
+</div>
+
+<!-- ── CAN CLOSE TAB ────────────────────────────────────────────────── -->
+<div class="tab-pane active" id="paneClose">
+
+  <!-- Progress -->
+  <div class="progress-wrap">
+    <div class="progress-bar"><div class="progress-fill" id="progFill" style="width:0%"></div></div>
+    <div class="progress-txt"><span id="progTxt">0</span> of <span id="progTotal">0</span> collected</div>
+    <button class="reset-btn" onclick="resetCollected()">Reset</button>
+  </div>
+
+  <!-- Sub-tabs: Pending / Collected -->
+  <div style="display:flex;gap:2px;padding:10px 16px 0;border-bottom:1px solid var(--border)">
+    <button class="tab-btn active" id="subPending" onclick="setSubTab('pending')" style="font-size:12px;padding:6px 14px">⏳ Pending <span id="subPendingCnt" style="background:#fef3c7;color:#92400e;padding:1px 7px;border-radius:8px;font-size:10px"></span></button>
+    <button class="tab-btn" id="subCollected" onclick="setSubTab('collected')" style="font-size:12px;padding:6px 14px">✅ Collected <span id="subCollectedCnt" style="background:#dcfce7;color:#166534;padding:1px 7px;border-radius:8px;font-size:10px"></span></button>
+  </div>
+
+  <div class="tbl-wrap">
+    <table id="tblClose">
+      <thead><tr>
+        <th class="sortable" onclick="sortTable('close','apm')">APM <span class="sort-icon">⇅</span></th>
+        <th>App Name</th>
+        <th>Owner</th>
+        <th>VBU</th>
+        <th>Matched AD Group(s)</th>
+        <th>MAR Entitlement(s)</th>
+        <th class="sortable" onclick="sortTable('close','mar_user_count')">MAR Users <span class="sort-icon">⇅</span></th>
+        <th>Quarter</th>
+        <th>SLA</th>
+        <th>Sentiment</th>
+        <th>PCI/SOX</th>
+        <th class="sortable" onclick="sortTable('close','due_date')">Due <span class="sort-icon">⇅</span></th>
+        <th>Actions</th>
+        <th title="Mark evidence collected">Done</th>
+      </tr></thead>
+      <tbody id="bodyClose"></tbody>
+    </table>
+    <div class="no-data hidden" id="noClose">No records match current filters.</div>
+  </div>
+</div>
+
+<!-- ── ISSUE / NEEDS WORK TAB ──────────────────────────────────────── -->
+<div class="tab-pane" id="paneIssue">
+  <div class="tbl-wrap">
+    <table id="tblIssue">
+      <thead><tr>
+        <th class="sortable" onclick="sortTable('issue','apm')">APM <span class="sort-icon">⇅</span></th>
+        <th>App Name</th>
+        <th>Owner</th>
+        <th>VBU</th>
+        <th>AD Groups</th>
+        <th>UAR Status</th>
+        <th>SLA</th>
+        <th>Sentiment</th>
+        <th>PCI/SOX</th>
+        <th class="sortable" onclick="sortTable('issue','due_date')">Due <span class="sort-icon">⇅</span></th>
+        <th>Issue Status</th>
+        <th>Last Reach</th>
+        <th>SSE Reviewer</th>
+        <th>Actions</th>
+      </tr></thead>
+      <tbody id="bodyIssue"></tbody>
+    </table>
+    <div class="no-data hidden" id="noIssue">No records match current filters.</div>
+  </div>
+</div>
+
+</div><!-- .main -->
+
+<!-- ── Side Drawer ───────────────────────────────────────────────────── -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer(event)">
+  <div class="drawer" onclick="event.stopPropagation()">
+    <div class="drawer-hdr">
+      <div>
+        <div class="drawer-title" id="drawerTitle">APM Detail</div>
+        <div class="drawer-sub" id="drawerSub"></div>
+      </div>
+      <button class="close-drawer" onclick="closeDrawer()">&times;</button>
+    </div>
+    <div class="drawer-body" id="drawerBody"></div>
+  </div>
+</div>
+
+<!-- ── Info Modal ────────────────────────────────────────────────────── -->
+<div class="info-overlay" id="infoOverlay" onclick="closeInfo(event)">
+  <div class="info-box" onclick="event.stopPropagation()">
+    <div class="info-hdr">
+      <div>
+        <div style="font-size:18px;font-weight:800">📖 Dashboard Guide</div>
+        <div style="font-size:12px;opacity:.8;margin-top:4px">SSE UAR — Evidence Collection Dashboard</div>
+      </div>
+      <button class="info-close" onclick="closeInfo()">&times;</button>
+    </div>
+    <div class="info-sec">
+      <h3>🎯 Two-Tab Workflow</h3>
+      <table class="info-tbl">
+        <tr><th>Tab</th><th>Who it's for</th><th>Action</th></tr>
+        <tr><td><strong>✅ Can Close</strong></td><td>APMs with AD groups verified in MAR</td><td>Download CSV → upload to AuditBoard → check Done</td></tr>
+        <tr><td><strong>❌ Issue / Needs Work</strong></td><td>APMs with no MAR match</td><td>Issue UAR finding or follow up with owner</td></tr>
+      </table>
+    </div>
+    <div class="info-sec">
+      <h3>📥 Evidence Collection Steps</h3>
+      <ol style="font-size:12px;line-height:2;padding-left:18px;color:#475569">
+        <li>Filter to <strong>✅ Can Close</strong> tab — these APMs have MAR evidence ready</li>
+        <li>Click <strong>📥 CSV</strong> to download the MAR evidence file</li>
+        <li>Click <strong>🔗 AB</strong> to open the finding in AuditBoard</li>
+        <li>Upload the CSV as evidence attachment in AuditBoard</li>
+        <li>Check <strong>✅ Done</strong> — the row moves to the "Collected" sub-tab</li>
+      </ol>
+    </div>
+    <div class="info-sec">
+      <h3>🧠 AI Fields</h3>
+      <table class="info-tbl">
+        <tr><th>Field</th><th>Meaning</th></tr>
+        <tr><td>SLA</td><td>Compliant = within deadline. Non-Compliant = past due SLA.</td></tr>
+        <tr><td>Sentiment</td><td>Tone of comment history: Positive 😊 / Neutral 😐 / Negative 😠</td></tr>
+        <tr><td>Last Reach Out</td><td>Who sent the last comment — Customer (app team) or SSE (our team)</td></tr>
+        <tr><td>SSE Reviewer</td><td>SSE team member assigned to this finding</td></tr>
+      </table>
+    </div>
+    <div class="info-sec" style="background:#f8fafc;text-align:center">
+      <p style="font-size:11px;color:#94a3b8">SSE UAR · Data from BigQuery uar_findings_enriched · MAR quarterly evidence<br>Questions? Reach out to SSE Global Compliance.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast ─────────────────────────────────────────────────────────── -->
+<div class="toast" id="toast"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════════════════════════════════════ -->
+<script>
+const apmData = __APM_DATA__;
+const STORAGE_KEY = 'sse_uar_collected';
+const CURRENT_QUARTER = '__CURRENT_QUARTER__';
+
+// ── State ──────────────────────────────────────────────────────────────────
+let activeTab    = 'close';
+let activeSubTab = 'pending';
+let collectedSet = new Set(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'));
+let searchQ      = '';
+let fVbu = '', fSla = '', fSens = '', fDue = '', fQuarter = '', fSseReviewer = '';
+let sortClose    = {col:'mar_user_count', asc:false};
+let sortIssue    = {col:'due_date', asc:true};
+let debTimer     = null;
+
+// ── Derived data ───────────────────────────────────────────────────────────
+const canCloseData = apmData.filter(a => a.pct === 100);
+const issueData    = apmData.filter(a => a.pct < 100);
+
+// ── Init ───────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('hdrSub').textContent =
+    `${apmData.length} APMs · ${CURRENT_QUARTER} · ${canCloseData.length} ready to close · ${issueData.length} need action`;
+
+  document.getElementById('statTotal').textContent   = apmData.length;
+  document.getElementById('statClose').textContent   = canCloseData.length;
+  document.getElementById('statPartial').textContent = apmData.filter(a=>a.pct>0&&a.pct<100).length;
+  document.getElementById('statIssue').textContent   = apmData.filter(a=>a.pct===0).length;
+  document.getElementById('statDue').textContent     = apmData.filter(a=>a.due_status==='Past due').length;
+
+  document.getElementById('cntClose').textContent  = canCloseData.length;
+  document.getElementById('cntIssue').textContent  = issueData.length;
+  document.getElementById('progTotal').textContent = canCloseData.length;
+
+  // VBU dropdown
+  const vbus = [...new Set(apmData.map(a=>a.vbu).filter(Boolean))].sort();
+  const vbuSel = document.getElementById('fVbu');
+  vbus.forEach(v => { const o=document.createElement('option'); o.value=v; o.textContent=v; vbuSel.appendChild(o); });
+
+  // Quarter dropdown
+  const quarters = [...new Set(apmData.map(a=>a.quarter).filter(Boolean))].sort().reverse();
+  const qSel = document.getElementById('fQuarter');
+  quarters.forEach(q => { const o=document.createElement('option'); o.value=q; o.textContent=q; qSel.appendChild(o); });
+
+  // SSE Reviewer dropdown
+  const reviewers = [...new Set(apmData.map(a=>a.llm_sse_reviewer).filter(Boolean))].sort();
+  const rSel = document.getElementById('fSseReviewer');
+  reviewers.forEach(r => { const o=document.createElement('option'); o.value=r; o.textContent=r; rSel.appendChild(o); });
+
+  applyFilters();
+  // Init sort icons to show default sort direction
+  setTimeout(()=>{ updateSortIcons('close',sortClose); updateSortIcons('issue',sortIssue); }, 0);
+});
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function sensitivityBadge(sl) {
+  if (!sl) return '';
+  const m = {
+    'highly_sensitive': ['b-red','🔴 HIGHLY SENSITIVE'],
+    'sensitive':        ['b-amber','🟡 SENSITIVE'],
+    'non_sensitive':    ['b-green','🟢 NON-SENSITIVE'],
+  };
+  const [cls, label] = m[sl] || ['b-gray', sl];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+function slaBadge(s){ return s==='Compliant'?'<span class="badge b-green">✅ Compliant</span>':s==='Non-Compliant'?'<span class="badge b-red">❌ Non-Compliant</span>':''; }
+function sentimentBadge(s){ return s==='Positive'?'<span class="badge b-green">😊 Positive</span>':s==='Negative'?'<span class="badge b-red">😠 Negative</span>':'<span class="badge b-gray">😐 Neutral</span>'; }
+function pciSoxBadge(rec){ return (rec.pci?'<span class="badge b-pci">💳 PCI</span>':'')+(rec.sox?'<span class="badge b-sox">📊 SOX</span>':''); }
+function dueBadge(d, ds){
+  const date = (d||'').substring(0,10);
+  if (!date) return '—';
+  const cls = ds==='Past due'?'due-past':'due-ok';
+  return `<span class="${cls}">${date}</span>`;
+}
+function adChips(groups, cls){
+  if (!groups) return '<span class="badge b-gray">None</span>';
+  return groups.split('|').filter(Boolean).map(g=>`<span class="chip chip-${cls}" title="${esc(g)}">${esc(g)}</span>`).join('');
+}
+function uarBadge(s){
+  const m={
+    'ALL_DOING_UAR':     ['b-green','✅ All in UAR'],
+    'PARTIAL_UAR':       ['b-amber','⚡ Partial UAR'],
+    'NOT_DOING_UAR':     ['b-red','❌ Not in UAR'],
+    'NO_AD_GROUPS':      ['b-gray','⚠ No AD Groups'],
+    'NO_AD_GROUPS_FOUND':['b-gray','⚠ No AD Groups'],
+  };
+  const [cls,label]=m[s]||['b-gray',s||'—'];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+function issueStatusBadge(s){
+  if(s==='Open') return '<span class="badge b-blue">Open</span>';
+  if(s==='Inactive') return '<span class="badge b-gray">Inactive</span>';
+  return '<span class="badge b-amber">Pending</span>';
+}
+function abBtn(rec){
+  if(!rec.auditboard_link) return '';
+  const cls = rec.ab_link_type==='direct'?'btn-ab':'btn-ab-fb';
+  return `<a class="act-btn ${cls}" href="${esc(rec.auditboard_link)}" target="_blank" onclick="event.stopPropagation()">🔗 AB</a>`;
+}
+function csvBtn(rec){
+  if(!rec.csv_b64||rec.csv_b64==='') return '';
+  return `<button class="act-btn btn-csv" onclick="event.stopPropagation();dlCsv('${esc(rec.apm)}','${esc(rec.csv_b64)}')">📥 CSV</button>`;
+}
+function emailBtn(rec){
+  const e = rec.email||'';
+  if(!e||!e.includes('@')) return '';
+  const subject = encodeURIComponent(`UAR Finding: ${rec.apm} — ${rec.title}`);
+  return `<a class="act-btn btn-email" href="mailto:${esc(e)}?subject=${subject}" onclick="event.stopPropagation()">✉ Email</a>`;
+}
+function ownerCell(rec){
+  const name = esc(rec.owner||'Unknown');
+  const email = rec.email||'';
+  if(email&&email.includes('@'))
+    return `<div class="col-owner"><strong>${name}</strong><br><a href="mailto:${esc(email)}" onclick="event.stopPropagation()">${esc(email)}</a></div>`;
+  return `<div class="col-owner"><strong>${name}</strong></div>`;
+}
+function quarterBadge(q){ return q?`<span class="badge b-blue">📅 ${esc(q)}</span>`:''; }
+
+// ── Filter logic ───────────────────────────────────────────────────────────
+function filterRec(rec) {
+  if(fVbu         && rec.vbu !== fVbu)                        return false;
+  if(fSla         && rec.llm_sla !== fSla)                    return false;
+  if(fSens        && rec.sens_level !== fSens)                 return false;
+  if(fDue         && rec.due_status !== fDue)                  return false;
+  if(fQuarter     && rec.quarter !== fQuarter)                 return false;
+  if(fSseReviewer && rec.llm_sse_reviewer !== fSseReviewer)    return false;
+  if(searchQ){
+    const q = searchQ.toLowerCase();
+    const h = [rec.apm,rec.title,rec.app_name,rec.owner,rec.email,rec.vbu,
+               rec.all_ad_groups,rec.in_uar,rec.not_in_uar,rec.mar_matched_groups].join(' ').toLowerCase();
+    if(!h.includes(q)) return false;
+  }
+  return true;
+}
+
+function debounceFilter(){
+  clearTimeout(debTimer);
+  debTimer = setTimeout(()=>{
+    searchQ = document.getElementById('searchInput').value;
+    document.getElementById('searchClear').style.display = searchQ ? 'block' : 'none';
+    applyFilters();
+  }, 150);
+}
+
+function clearSearch(){
+  document.getElementById('searchInput').value = '';
+  document.getElementById('searchClear').style.display = 'none';
+  searchQ = '';
+  applyFilters();
+}
+
+function clearAllFilters(){
+  document.getElementById('searchInput').value = '';
+  document.getElementById('searchClear').style.display = 'none';
+  document.getElementById('fVbu').value         = '';
+  document.getElementById('fSla').value         = '';
+  document.getElementById('fSens').value        = '';
+  document.getElementById('fDue').value         = '';
+  document.getElementById('fQuarter').value     = '';
+  document.getElementById('fSseReviewer').value = '';
+  searchQ = ''; fVbu = ''; fSla = ''; fSens = ''; fDue = ''; fQuarter = ''; fSseReviewer = '';
+  document.getElementById('clearFiltersBtn').style.display = 'none';
+  renderCloseTable();
+  renderIssueTable();
+}
+
+function applyFilters(){
+  fVbu         = document.getElementById('fVbu').value;
+  fSla         = document.getElementById('fSla').value;
+  fSens        = document.getElementById('fSens').value;
+  fDue         = document.getElementById('fDue').value;
+  fQuarter     = document.getElementById('fQuarter').value;
+  fSseReviewer = document.getElementById('fSseReviewer').value;
+  // Show "Clear filters" button whenever any filter is active
+  const anyActive = searchQ || fVbu || fSla || fSens || fDue || fQuarter || fSseReviewer;
+  document.getElementById('clearFiltersBtn').style.display = anyActive ? 'inline-block' : 'none';
+  renderCloseTable();
+  renderIssueTable();
+}
+
+function filterByDue(){
+  document.getElementById('fDue').value = 'Past due';
+  applyFilters();
+}
+
+// ── Sort ───────────────────────────────────────────────────────────────────
+function sortTable(which, col){
+  const s = which==='close'?sortClose:sortIssue;
+  if(s.col===col) s.asc=!s.asc; else { s.col=col; s.asc=col!=='mar_user_count'; }
+  updateSortIcons(which, s);
+  if(which==='close') renderCloseTable(); else renderIssueTable();
+}
+function sortData(arr, s){
+  return [...arr].sort((a,b)=>{
+    let va=a[s.col]||'', vb=b[s.col]||'';
+    if(typeof va==='number'&&typeof vb==='number') return s.asc?va-vb:vb-va;
+    va=String(va).toLowerCase(); vb=String(vb).toLowerCase();
+    return s.asc?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0);
+  });
+}
+function updateSortIcons(which, s){
+  const tblId = which==='close'?'tblClose':'tblIssue';
+  const tbl = document.getElementById(tblId);
+  if(!tbl) return;
+  tbl.querySelectorAll('th.sortable').forEach(th => {
+    const icon = th.querySelector('.sort-icon');
+    if(!icon) return;
+    const col = th.getAttribute('onclick')||'';
+    const isActive = col.includes(`'${s.col}'`);
+    icon.textContent = isActive ? (s.asc ? '▲' : '▼') : '⇅';
+    icon.style.opacity = isActive ? '1' : '.4';
+  });
+}
+
+// ── Can Close table ────────────────────────────────────────────────────────
+function renderCloseTable(){
+  const filtered  = sortData(canCloseData.filter(filterRec), sortClose);
+  const pending   = filtered.filter(r => !collectedSet.has(r.apm));
+  const collected = filtered.filter(r =>  collectedSet.has(r.apm));
+
+  document.getElementById('subPendingCnt').textContent  = pending.length;
+  document.getElementById('subCollectedCnt').textContent = collected.length;
+  document.getElementById('cntClose').textContent        = canCloseData.filter(filterRec).length;
+
+  const rows  = activeSubTab === 'pending' ? pending : collected;
+  const tbody = document.getElementById('bodyClose');
+  if(!rows.length){
+    tbody.innerHTML = '';
+    document.getElementById('noClose').classList.remove('hidden');
+  } else {
+    document.getElementById('noClose').classList.add('hidden');
+    tbody.innerHTML = rows.map(makeCloseRow).join('');
+  }
+  updateProgress();
+  updateResultCount();
+}
+
+function makeCloseRow(rec){
+  const isCollected = collectedSet.has(rec.apm);
+  return `<tr class="${isCollected?'collected-row':''}" onclick="openDrawer('${esc(rec.apm)}')">
+    <td><span class="col-apm">${esc(rec.apm)}</span></td>
+    <td><div class="col-app">${esc(rec.app_name||rec.title)}</div></td>
+    <td>${ownerCell(rec)}</td>
+    <td>${esc(rec.vbu||'—')}</td>
+    <td class="col-adgroups">${adChips(rec.in_uar,'green')}</td>
+    <td class="col-mar">${esc((rec.mar_entitlements||rec.in_uar||'').substring(0,80))}</td>
+    <td class="col-users">${(rec.mar_user_count||0).toLocaleString()}</td>
+    <td>${quarterBadge(rec.quarter)}</td>
+    <td>${slaBadge(rec.llm_sla)}</td>
+    <td>${sentimentBadge(rec.llm_sentiment)}</td>
+    <td>${pciSoxBadge(rec)}</td>
+    <td>${dueBadge(rec.due_date,rec.due_status)}</td>
+    <td class="col-actions">${csvBtn(rec)} ${abBtn(rec)}</td>
+    <td><input type="checkbox" class="cb-done" ${isCollected?'checked':''}
+        onclick="event.stopPropagation();toggleCollected('${esc(rec.apm)}',this)" title="Mark evidence collected"/></td>
+  </tr>`;
+}
+
+// ── Issue table ────────────────────────────────────────────────────────────
+function renderIssueTable(){
+  const filtered = sortData(issueData.filter(filterRec), sortIssue);
+  document.getElementById('cntIssue').textContent = filtered.length;
+
+  const tbody = document.getElementById('bodyIssue');
+  if(!filtered.length){
+    tbody.innerHTML='';
+    document.getElementById('noIssue').classList.remove('hidden');
+  } else {
+    document.getElementById('noIssue').classList.add('hidden');
+    tbody.innerHTML = filtered.map(makeIssueRow).join('');
+  }
+  updateResultCount();
+}
+
+function makeIssueRow(rec){
+  const adGroups = rec.not_in_uar||rec.all_ad_groups||'';
+  const lr = rec.llm_last_reach_out||'—';
+  const lrBadge = lr==='Customer'?'<span class="badge b-purple">👤 Customer</span>':
+                  lr==='SSE'?'<span class="badge b-blue">🔒 SSE</span>':
+                  `<span class="badge b-gray">${esc(lr)}</span>`;
+  return `<tr onclick="openDrawer('${esc(rec.apm)}')">
+    <td><span class="col-apm">${esc(rec.apm)}</span></td>
+    <td><div class="col-app">${esc(rec.app_name||rec.title)}</div></td>
+    <td>${ownerCell(rec)}</td>
+    <td>${esc(rec.vbu||'—')}</td>
+    <td class="col-adgroups">${adGroups?adChips(adGroups,'red'):'<span class="badge b-gray">None found</span>'}</td>
+    <td>${uarBadge(rec.uar_status)}</td>
+    <td>${slaBadge(rec.llm_sla)}</td>
+    <td>${sentimentBadge(rec.llm_sentiment)}</td>
+    <td>${pciSoxBadge(rec)}</td>
+    <td>${dueBadge(rec.due_date,rec.due_status)}</td>
+    <td>${issueStatusBadge(rec.issue_status)}</td>
+    <td>${lrBadge}</td>
+    <td>${esc(rec.llm_sse_reviewer||'—')}</td>
+    <td class="col-actions">${abBtn(rec)} ${emailBtn(rec)}</td>
+  </tr>`;
+}
+
+// ── Tab switching ──────────────────────────────────────────────────────────
+function setTab(which){
+  activeTab = which;
+  document.getElementById('tabClose').classList.toggle('active',  which==='close');
+  document.getElementById('tabIssue').classList.toggle('active',  which==='issue');
+  document.getElementById('paneClose').classList.toggle('active', which==='close');
+  document.getElementById('paneIssue').classList.toggle('active', which==='issue');
+  document.getElementById('quarterGroup').classList.toggle('hidden', which==='issue');
+  applyFilters();
+}
+
+function setSubTab(which){
+  activeSubTab = which;
+  document.getElementById('subPending').classList.toggle('active',   which==='pending');
+  document.getElementById('subCollected').classList.toggle('active', which==='collected');
+  renderCloseTable();
+}
+
+// ── Evidence tracking ──────────────────────────────────────────────────────
+function toggleCollected(apm, cb){
+  if(cb.checked) collectedSet.add(apm); else collectedSet.delete(apm);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify([...collectedSet]));
+  updateProgress();
+  renderCloseTable();
+  showToast(cb.checked ? `✅ ${apm} marked collected` : `↩ ${apm} unchecked`);
+}
+function updateProgress(){
+  const total = canCloseData.length;
+  const done  = canCloseData.filter(r=>collectedSet.has(r.apm)).length;
+  const pct   = total ? Math.round(done/total*100) : 0;
+  document.getElementById('progFill').style.width = pct+'%';
+  document.getElementById('progTxt').textContent  = done;
+}
+function resetCollected(){
+  if(!confirm('Reset all collected evidence?')) return;
+  collectedSet.clear();
+  localStorage.removeItem(STORAGE_KEY);
+  updateProgress();
+  renderCloseTable();
+}
+
+// ── Result count ───────────────────────────────────────────────────────────
+function updateResultCount(){
+  const closeVis = canCloseData.filter(filterRec).length;
+  const issueVis = issueData.filter(filterRec).length;
+  const vis   = activeTab==='close' ? closeVis : issueVis;
+  const total = activeTab==='close' ? canCloseData.length : issueData.length;
+  document.getElementById('resultCount').textContent = `Showing ${vis} of ${total}`;
+}
+
+// ── Drawer ─────────────────────────────────────────────────────────────────
+function openDrawer(apm){
+  const rec = apmData.find(r=>r.apm===apm);
+  if(!rec) return;
+
+  document.getElementById('drawerTitle').textContent = `${rec.apm} — ${rec.app_name||rec.title}`;
+  document.getElementById('drawerSub').innerHTML = `${rec.owner||'Unknown owner'} &nbsp;·&nbsp; ${rec.vbu||''}`;
+
+  const inUar  = (rec.in_uar||'').split('|').filter(Boolean);
+  const notUar = (rec.not_in_uar||'').split('|').filter(Boolean);
+  const marEnts = rec.mar_entitlements || (rec.in_uar||'').replace(/\|/g,', ') || '—';
+  const summary = (rec.llm_summary||'No summary available.').replace(/\*\*/g,'').replace(/^- /gm,'• ');
+
+  let chipsHtml = '';
+  if(inUar.length)  chipsHtml += inUar.map(g=>`<span class="chip chip-green">${esc(g)}</span>`).join('');
+  if(notUar.length) chipsHtml += notUar.map(g=>`<span class="chip chip-red">${esc(g)}</span>`).join('');
+  if(!chipsHtml)    chipsHtml = '<span class="badge b-gray">No AD groups found</span>';
+
+  const flagsHtml = slaBadge(rec.llm_sla)+' '+sentimentBadge(rec.llm_sentiment)+' '+pciSoxBadge(rec)+' '+sensitivityBadge(rec.sens_level);
+
+  document.getElementById('drawerBody').innerHTML = `
+    <div class="drow"><div class="drow-lbl">Flags</div><div class="drow-val">${flagsHtml}</div></div>
+    <div class="drow"><div class="drow-lbl">Finding Title</div><div class="drow-val">${esc(rec.title)}</div></div>
+    <div class="drow"><div class="drow-lbl">Owner</div><div class="drow-val">${esc(rec.owner||'Unknown')} &lt;<a href="mailto:${esc(rec.email||'')}">${esc(rec.email||'no email')}</a>&gt;</div></div>
+    <div class="drow"><div class="drow-lbl">Due Date</div><div class="drow-val">${dueBadge(rec.due_date,rec.due_status)} <small style="color:var(--muted)">${esc(rec.due_status||'')}</small></div></div>
+    <div class="drow"><div class="drow-lbl">AD Groups (green = in MAR, red = not in MAR)</div><div class="drow-val chip-row">${chipsHtml}</div></div>
+    <div class="drow"><div class="drow-lbl">MAR Entitlements</div><div class="drow-val">${esc(marEnts)}</div></div>
+    ${rec.mar_user_count?`<div class="drow"><div class="drow-lbl">MAR Users</div><div class="drow-val"><strong>${Number(rec.mar_user_count).toLocaleString()}</strong> users covered</div></div>`:''}
+    <div class="drow"><div class="drow-lbl">UAR Status</div><div class="drow-val">${uarBadge(rec.uar_status)} ${issueStatusBadge(rec.issue_status)}</div></div>
+    <div class="drow"><div class="drow-lbl">Last Reach Out / SSE Reviewer</div><div class="drow-val">${esc(rec.llm_last_reach_out||'—')} · ${esc(rec.llm_sse_reviewer||'—')}</div></div>
+    ${rec.llm_ownership_change==='Yes'?'<div class="drow"><div class="drow-val"><span class="badge b-amber">⚠ Ownership Change Requested</span></div></div>':''}
+    ${rec.llm_customer_question&&rec.llm_customer_question!=='Not a Question'?'<div class="drow"><div class="drow-val"><span class="badge b-purple">❓ Customer Has a Question</span></div></div>':''}
+    <div class="drow"><div class="drow-lbl">AI Summary</div><div class="drow-summary">${esc(summary)}</div></div>
+    <div class="drow" style="display:flex;gap:8px;flex-wrap:wrap">
+      ${csvBtn(rec)} ${abBtn(rec)} ${emailBtn(rec)}
+    </div>
+  `;
+
+  document.getElementById('drawerOverlay').classList.add('open');
+}
+
+function closeDrawer(e){
+  // Called with no args from button, or with event from overlay click
+  if(e && e.target !== document.getElementById('drawerOverlay')) return;
+  document.getElementById('drawerOverlay').classList.remove('open');
+}
+// Esc closes drawer and info modal
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape'){
+    document.getElementById('drawerOverlay').classList.remove('open');
+    document.getElementById('infoOverlay').classList.remove('open');
+  }
+});
+
+// ── Info modal ─────────────────────────────────────────────────────────────
+function showInfo(){ document.getElementById('infoOverlay').classList.add('open'); }
+function closeInfo(e){
+  if(!e||e.target===document.getElementById('infoOverlay'))
+    document.getElementById('infoOverlay').classList.remove('open');
+}
+
+// ── CSV downloads ──────────────────────────────────────────────────────────
+function dlCsv(apm, b64){
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  const blob = new Blob([bytes], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `MAR_evidence_${apm}.csv`;
+  a.click();
+  showToast(`📥 Evidence CSV downloaded for ${apm}`);
+}
+
+function buildCsvRows(rows){
+  const headers = [
+    'APM_ID','App_Name','Owner','Email','VBU','UAR_Status','Issue_Status',
+    'SLA','Sentiment','PCI','SOX','Due_Date','Due_Status',
+    'Matched_AD_Groups','MAR_Entitlements','MAR_User_Count',
+    'All_AD_Groups','Groups_Not_In_UAR','Quarter','AuditBoard_Link','SSE_Reviewer'
+  ];
+  const lines = [headers.map(h=>`"${h}"`).join(',')];
+  rows.forEach(r=>{
+    const vals = [
+      r.apm, r.app_name||r.title, r.owner, r.email, r.vbu,
+      r.uar_status, r.issue_status,
+      r.llm_sla, r.llm_sentiment, r.pci?'Yes':'No', r.sox?'Yes':'No',
+      (r.due_date||'').substring(0,10), r.due_status,
+      r.mar_matched_groups||r.in_uar, r.mar_entitlements, r.mar_user_count||'',
+      r.all_ad_groups, r.not_in_uar, r.quarter, r.auditboard_link, r.llm_sse_reviewer
+    ];
+    lines.push(vals.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(','));
+  });
+  return lines.join('\n');
+}
+
+function downloadFiltered(){
+  const data = activeTab==='close' ? canCloseData.filter(filterRec) : issueData.filter(filterRec);
+  const csv  = buildCsvRows(data);
+  const blob = new Blob([csv],{type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `sse_uar_${activeTab}_filtered_${new Date().toISOString().substring(0,10)}.csv`;
+  a.click();
+  showToast(`⬇ ${data.length} rows exported`);
+}
+
+function downloadAll(){
+  const csv  = buildCsvRows(apmData);
+  const blob = new Blob([csv],{type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `sse_uar_all_${new Date().toISOString().substring(0,10)}.csv`;
+  a.click();
+  showToast(`⬇ All ${apmData.length} APMs exported`);
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>
