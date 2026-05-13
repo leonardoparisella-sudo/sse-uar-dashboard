@@ -57,6 +57,10 @@ AD_GROUP_COLS = [
     "rl_access_groups", "kitt_sibling_ad_groups", "desc_named_groups",
 ]
 
+# Columns for the APM Universe tab (uar_apm_enriched)
+BQ_APM_ENRICHED = f"`{PROJECT}.sse_findings_enriched_data.uar_apm_enriched`"
+APM_ENRICHED_AD_COLS = ["Kitt_AD_Group", "GCP_Owner_Groups", "GCP_Prod_Owner_Groups"]
+
 HERE = Path(__file__).parent
 OUTPUT = HERE / "sse_uar_dashboard.html"
 TEMPLATE_FILE = HERE / "template.html"
@@ -655,12 +659,13 @@ def build_apm_list(
         }
 
     # Serialise to list
-    print("Generating evidence CSVs...")
+    print("Generating evidence CSVs (can-close only)...")
     result: list[dict[str, Any]] = []
     for apm, data in records.items():
         total_ad = data["toClose"] + data["keepOpen"]
         pct = round(data["toClose"] / total_ad * 100) if total_ad else 0
-        csv_b64 = build_evidence_csv(data["in_uar"], mar_df, apm, data["quarter"])
+        # Only embed CSV for APMs that can fully close (pct == 100) — saves ~2.5 MB
+        csv_b64 = build_evidence_csv(data["in_uar"], mar_df, apm, data["quarter"]) if pct == 100 else ""
         mar_ents_str = ", ".join(data["mar_ents_list"]) if data["mar_ents_list"] else ""
         in_uar_str = "|".join(data["in_uar"])
         result.append({
@@ -703,6 +708,253 @@ def build_apm_list(
     return result
 
 
+# ── Token-indexed MAR matcher (fast pre-filter for large APM sets) ─────────────
+
+def build_mar_token_index(mar_ent_counts: dict[str, dict]) -> dict[str, list[str]]:
+    """Build a token → [ent_lowers] index for fast candidate lookup.
+
+    Tokenizes each entitlement on word boundaries (dash, underscore, space).
+    For an AD group query we look up each token of the group name and get a
+    small candidate set before running the full is_meaningful_match() regex.
+    This cuts 7948×3500 = 28M calls down to ~1000×(small candidate set).
+    """
+    index: dict[str, list[str]] = {}
+    for ent_lower in mar_ent_counts:
+        tokens = re.split(r'[\s\-_@]+', ent_lower)
+        for tok in tokens:
+            if len(tok) >= 4:
+                index.setdefault(tok, []).append(ent_lower)
+    return index
+
+
+def get_mar_candidates(ad_group: str, token_index: dict[str, list[str]]) -> set[str]:
+    """Return candidate entitlement_lowers that share at least one token with ad_group."""
+    ad_clean = clean_ad_group(ad_group).lower()
+    if len(ad_clean) < 4:
+        return set()
+    tokens = re.split(r'[\s\-_@]+', ad_clean)
+    candidates: set[str] = set()
+    for tok in tokens:
+        if len(tok) >= 4:
+            candidates.update(token_index.get(tok, []))
+    # Also try full string and core name (strip common prefixes)
+    ad_core = re.sub(r'^(gcp-|hw-|sams-|intl-|ad\s*-\s*)', '', ad_clean, flags=re.IGNORECASE)
+    if len(ad_core) >= 4:
+        for tok in re.split(r'[\s\-_@]+', ad_core):
+            if len(tok) >= 4:
+                candidates.update(token_index.get(tok, []))
+    return candidates
+
+
+def build_strict_verification_fast(
+    apm_all_groups: dict[str, set[str]],
+    mar_ent_counts: dict[str, dict],
+    token_index: dict[str, list[str]],
+    mar_df: pd.DataFrame | None = None,
+) -> dict[str, dict]:
+    """Token-indexed version of build_strict_verification — same output, much faster.
+
+    For 1800 APMs with AD groups × 3500 MAR entitlements:
+    - Without index: ~6.3M is_meaningful_match calls
+    - With index:    ~20k calls (only candidate entitlements per AD group)
+    """
+    apm_verified: dict[str, dict] = {}
+
+    for apm, groups in apm_all_groups.items():
+        if not groups:
+            continue
+        matched_groups: list[str] = []
+        matched_ents: list[str] = []
+        matched_ent_lowers: list[str] = []
+
+        for ad_group in groups:
+            candidates = get_mar_candidates(ad_group, token_index)
+            if not candidates:
+                continue
+            best_ent: str | None = None
+            best_ent_lower: str | None = None
+            best_count = 0
+            for ent_lower in candidates:
+                info = mar_ent_counts.get(ent_lower)
+                if not info:
+                    continue
+                if is_meaningful_match(ad_group, ent_lower):
+                    if best_ent is None or info["count"] > best_count:
+                        best_ent = info["original"]
+                        best_ent_lower = ent_lower
+                        best_count = info["count"]
+            if best_ent:
+                matched_groups.append(ad_group)
+                if best_ent not in matched_ents:
+                    matched_ents.append(best_ent)
+                    matched_ent_lowers.append(best_ent_lower)
+
+        if matched_groups:
+            if mar_df is not None and matched_ent_lowers:
+                mask = mar_df["entitlement_lower"].isin(matched_ent_lowers)
+                unique_users = mar_df.loc[mask, "userId"].dropna().nunique()
+            else:
+                unique_users = sum(
+                    mar_ent_counts[el]["count"]
+                    for el in matched_ent_lowers
+                    if el in mar_ent_counts
+                )
+            apm_verified[apm] = {
+                "ad_groups": matched_groups,
+                "mar_entitlements": matched_ents,
+                "user_count": unique_users,
+            }
+
+    return apm_verified
+
+
+# ── APM Universe loader (uar_apm_enriched) ─────────────────────────────────────
+
+def load_apm_universe(
+    mar_ent_counts: dict[str, dict],
+    token_index: dict[str, list[str]],
+    mar_df: pd.DataFrame | None,
+    existing_apm_ids: set[str],
+) -> list[dict]:
+    """Load all 7948 APMs from uar_apm_enriched, run strict MAR matching,
+    and categorize them for the APM Universe tab.
+
+    Returns a list of dicts with keys:
+        apm, app_name, business_unit, data_class, sens_level, pci, sox,
+        it_owner_email, biz_owner_email, owner_email (best available),
+        ad_groups (pipe-joined), matched_groups (pipe-joined),
+        mar_entitlements (text), mar_user_count,
+        status: 'can_close' | 'needs_finding' | 'no_groups',
+        has_existing_finding (bool — already in current UAR findings)
+    """
+    print("Loading APM Universe from BigQuery (uar_apm_enriched)...")
+    sql = f"""
+    SELECT
+      APMid,
+      App_Name,
+      Business_Unit,
+      Data_Classification,
+      Flagged_PCI,
+      Flagged_SOX,
+      IT_App_Owner_Email,
+      Business_Owner_Email,
+      IT_App_Owner,
+      Business_Owner,
+      Kitt_AD_Group,
+      GCP_Owner_Groups,
+      GCP_Prod_Owner_Groups,
+      APM_Status
+    FROM {BQ_APM_ENRICHED}
+    WHERE APMid IS NOT NULL
+    """
+    df = _query(sql)
+    print(f"   Loaded {len(df):,} APMs from uar_apm_enriched")
+
+    # Normalize
+    df["APMid"] = df["APMid"].fillna("").astype(str).str.strip()
+    df = df[df["APMid"] != ""]
+
+    # Build AD groups per APM (only 3 columns in this table)
+    print("Extracting AD groups from uar_apm_enriched...")
+    apm_groups: dict[str, set[str]] = {}
+    for _, row in df.iterrows():
+        apm = str(row["APMid"])
+        groups: set[str] = set()
+        for col in APM_ENRICHED_AD_COLS:
+            val = row.get(col)
+            if val is not None and str(val).strip() not in ("", "nan", "None", "[]", "null"):
+                groups.update(extract_groups_from_value(val))
+        apm_groups[apm] = groups
+
+    has_any = sum(1 for v in apm_groups.values() if v)
+    print(f"   {has_any:,} APMs have AD groups, {len(apm_groups)-has_any:,} have none")
+
+    # Run fast token-indexed strict matching
+    print("Running strict AD→MAR matching for APM Universe (token-indexed)...")
+    apm_verified = build_strict_verification_fast(
+        apm_groups, mar_ent_counts, token_index, mar_df
+    )
+    print(f"   {len(apm_verified):,} APMs have verified MAR evidence")
+
+    # Build output records
+    universe: list[dict] = []
+    for _, row in df.iterrows():
+        apm = str(row["APMid"])
+        groups = apm_groups.get(apm, set())
+        verified = apm_verified.get(apm)
+
+        # Categorize
+        if not groups:
+            status = "no_groups"
+            matched_groups: set[str] = set()
+            unmatched_groups = set()
+            mar_ents: list[str] = []
+            mar_users = 0
+        elif verified:
+            matched_groups = set(verified["ad_groups"])
+            unmatched_groups = groups - matched_groups
+            mar_ents = verified["mar_entitlements"]
+            mar_users = verified.get("user_count", 0)
+            status = "can_close" if not unmatched_groups else "needs_finding"
+        else:
+            matched_groups = set()
+            unmatched_groups = groups
+            mar_ents = []
+            mar_users = 0
+            status = "needs_finding"
+
+        # Best owner email
+        it_email = _safe_str(row.get("IT_App_Owner_Email", "")).strip()
+        biz_email = _safe_str(row.get("Business_Owner_Email", "")).strip()
+        owner_email = it_email if it_email and "@" in it_email else biz_email
+        owner_name = _safe_str(row.get("IT_App_Owner", row.get("Business_Owner", "Unknown")))[:30]
+
+        # Per-source AD group fields (pipe-joined, lowercased) for JS filter
+        def _pipe_groups(col: str) -> str:
+            val = row.get(col)
+            if val is None or str(val).strip() in ("", "nan", "None", "[]", "null"):
+                return ""
+            return "|".join(sorted(g.lower() for g in extract_groups_from_value(val) if g))
+
+        universe.append({
+            "apm": apm,
+            "app_name": _safe_str(row.get("App_Name", ""))[:50],
+            "business_unit": _safe_str(row.get("Business_Unit", "")),
+            # data_class omitted — sens_level (derived) is used by JS, raw classification is not
+            "sens_level": _sens_level(_safe_str(row.get("Data_Classification", ""))),
+            "pci": str(row.get("Flagged_PCI", "")).lower() == "true",
+            "sox": str(row.get("Flagged_SOX", "")).lower() == "true",
+            # it_owner_email / biz_owner_email omitted — JS only uses owner_email
+            "owner_email": owner_email,
+            "owner_name": owner_name,
+            "all_ad_groups": "|".join(sorted(groups)),
+            "matched_groups": "|".join(sorted(matched_groups)),
+            "unmatched_groups": "|".join(sorted(unmatched_groups)),
+            "mar_entitlements": ", ".join(mar_ents[:5]) + ("…" if len(mar_ents) > 5 else ""),
+            "mar_user_count": mar_users,
+            "status": status,
+            "has_existing_finding": apm in existing_apm_ids,
+            # apm_status omitted — not referenced in template
+            # Per-source AD group fields for JS AD source filter
+            "kitt_group": _pipe_groups("Kitt_AD_Group"),
+            "gcp_group":  _pipe_groups("GCP_Owner_Groups"),
+            "gcpp_group": _pipe_groups("GCP_Prod_Owner_Groups"),
+        })
+
+    # Stats
+    can_close  = sum(1 for u in universe if u["status"] == "can_close")
+    needs      = sum(1 for u in universe if u["status"] == "needs_finding")
+    no_groups  = sum(1 for u in universe if u["status"] == "no_groups")
+    with_finding = sum(1 for u in universe if u["has_existing_finding"])
+    print(f"APM Universe: {len(universe):,} total")
+    print(f"   Can Close (in MAR):    {can_close:,}")
+    print(f"   Needs Finding (not in MAR): {needs:,}")
+    print(f"   No AD Groups:          {no_groups:,}")
+    print(f"   Already have finding:  {with_finding:,}")
+
+    return universe
+
+
 # ── Main orchestrator ──────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -716,6 +968,7 @@ def main() -> None:
 
     # 2. Build MAR entitlement counts for strict matching (reuse evidence df)
     mar_ent_counts: dict[str, dict] = {}
+    token_index: dict[str, list[str]] = {}
     if mar_dataframes:
         ev = mar_dataframes[0]
         ent_grp = ev.groupby("entitlement").agg({"userId": "count"}).reset_index()
@@ -725,6 +978,8 @@ def main() -> None:
             if ent:
                 mar_ent_counts[ent.lower()] = {"original": ent, "count": int(r["user_count"])}
         print(f"MAR entitlement index: {len(mar_ent_counts):,} unique entitlements")
+        token_index = build_mar_token_index(mar_ent_counts)
+        print(f"Token index: {len(token_index):,} tokens")
 
     # 3. Findings from BQ (includes all LLM fields + AD groups inline)
     df = load_findings()
@@ -732,9 +987,16 @@ def main() -> None:
     # 4. Extract AD groups from findings df (no extra BQ query needed)
     apm_all_groups = load_ad_groups_from_bq(df)
 
-    # 5. Strict AD→MAR verification (inline, ~30s)
+    # 5. Strict AD→MAR verification — use fast token-indexed version if index built
     mar_df_for_verification = mar_dataframes[0] if mar_dataframes else None
-    apm_verified = build_strict_verification(apm_all_groups, mar_ent_counts, mar_df=mar_df_for_verification)
+    if token_index:
+        print("Strict AD→MAR verification (token-indexed)...")
+        apm_verified = build_strict_verification_fast(
+            apm_all_groups, mar_ent_counts, token_index, mar_df=mar_df_for_verification
+        )
+        print(f"   {len(apm_verified)} APMs have verified UAR evidence")
+    else:
+        apm_verified = build_strict_verification(apm_all_groups, mar_ent_counts, mar_df=mar_df_for_verification)
 
     # 6. Sensitivity from BQ
     apm_sensitivity = load_sensitivity()
@@ -742,7 +1004,16 @@ def main() -> None:
     # 7. AuditBoard links from findings df
     ab_links, ab_types = load_ab_links(df)
 
-    # 8. Build final APM list
+    # 8. APM Universe (uar_apm_enriched) — run against MAR to find new findings
+    existing_apm_ids = {str(a["apm_id"]) for _, a in df.iterrows()} if not df.empty else set()
+    apm_universe = load_apm_universe(
+        mar_ent_counts=mar_ent_counts,
+        token_index=token_index,
+        mar_df=mar_dataframes[0] if mar_dataframes else None,
+        existing_apm_ids=existing_apm_ids,
+    )
+
+    # 9. Build final APM list
     apm_list = build_apm_list(
         df,
         apm_all_groups=apm_all_groups,
@@ -769,9 +1040,10 @@ def main() -> None:
     print(f"  Past Due:          {past_due}")
     print(f"  Quarter:           {current_quarter}")
 
-    # 9. Render HTML
+    # 10. Render HTML
     template = TEMPLATE_FILE.read_text(encoding="utf-8")
     html = template.replace("__APM_DATA__", json.dumps(apm_list, default=str))
+    html = html.replace("__APM_UNIVERSE_DATA__", json.dumps(apm_universe, default=str))
     html = html.replace("__CURRENT_QUARTER__", current_quarter)
 
     OUTPUT.write_text(html, encoding="utf-8")

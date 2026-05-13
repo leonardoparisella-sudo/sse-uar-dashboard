@@ -148,6 +148,25 @@ tr.collected-row td{background:#f0fdf4;opacity:.7}
 .toast{position:fixed;bottom:24px;right:24px;background:#166534;color:white;padding:12px 20px;border-radius:8px;font-size:13px;font-weight:600;transform:translateY(60px);opacity:0;transition:all .25s;z-index:999}
 .toast.show{transform:translateY(0);opacity:1}
 .hidden{display:none!important}
+
+/* ── APM Universe tab ────────────────────────────────────────── */
+.u-subtabs{display:flex;gap:2px;padding:10px 16px 0;border-bottom:1px solid var(--border)}
+.u-subtab-btn{padding:6px 14px;border:1px solid transparent;border-bottom:none;border-radius:8px 8px 0 0;cursor:pointer;font-size:12px;font-weight:600;background:transparent;color:var(--muted);white-space:nowrap}
+.u-subtab-btn.active{background:white;border-color:var(--border);color:var(--blue);border-bottom:2px solid white;margin-bottom:-1px}
+.u-pane{display:none;padding:0}.u-pane.active{display:block}
+.bulk-bar{padding:10px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#fafbfc}
+.bulk-bar label{font-size:11px;color:var(--muted);font-weight:600}
+.btn-bulk-email{background:#8b5cf6;color:white;border:none;padding:5px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer}
+.btn-bulk-email:hover{background:#7c3aed}
+.btn-bulk-email:disabled{opacity:.45;cursor:default}
+.sel-count{font-size:11px;color:var(--muted)}
+.finding-badge{display:inline-block;padding:1px 6px;background:#dbeafe;color:#1d4ed8;border-radius:8px;font-size:10px;font-weight:700;white-space:nowrap;vertical-align:middle}
+.univ-pagination{padding:10px 16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap}
+.pg-btn{padding:4px 10px;border:1px solid var(--border);border-radius:5px;font-size:12px;cursor:pointer;background:white}
+.pg-btn:hover{background:#f0f4ff;border-color:var(--blue)}
+.pg-btn.active{background:var(--blue);color:white;border-color:var(--blue)}
+.pg-btn:disabled{opacity:.4;cursor:default}
+.pg-info{font-size:11px;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -184,11 +203,15 @@ tr.collected-row td{background:#f0fdf4;opacity:.7}
   </div>
   <div class="tile tile-red" onclick="setTab('issue')">
     <div class="tile-num" id="statIssue">—</div>
-    <div class="tile-lbl">❌ Issue Finding</div>
+    <div class="tile-lbl">❌ Needs Work</div>
   </div>
   <div class="tile" onclick="filterByDue()">
     <div class="tile-num" style="color:#dc2626" id="statDue">—</div>
     <div class="tile-lbl">⏱ Past Due</div>
+  </div>
+  <div class="tile" onclick="setTab('universe')" style="border-left:3px solid #8b5cf6">
+    <div class="tile-num" style="color:#6b21a8" id="statUnivNeeds">—</div>
+    <div class="tile-lbl">🔍 Needs Work</div>
   </div>
 </div>
 
@@ -256,6 +279,9 @@ tr.collected-row td{background:#f0fdf4;opacity:.7}
   <button class="tab-btn" id="tabIssue" onclick="setTab('issue')">
     ❌ Issue / Needs Work <span id="cntIssue" style="background:#fee2e2;color:#dc2626;padding:1px 7px;border-radius:8px;font-size:11px;margin-left:4px">0</span>
   </button>
+  <button class="tab-btn" id="tabUniverse" onclick="setTab('universe')" title="All 7,948 APMs — find which ones need new UAR findings">
+    🌐 APM Universe <span id="cntUniverse" style="background:#ede9fe;color:#6b21a8;padding:1px 7px;border-radius:8px;font-size:11px;margin-left:4px">0</span>
+  </button>
 </div>
 
 <!-- ── CAN CLOSE TAB ────────────────────────────────────────────────── -->
@@ -274,9 +300,18 @@ tr.collected-row td{background:#f0fdf4;opacity:.7}
     <button class="tab-btn" id="subCollected" onclick="setSubTab('collected')" style="font-size:12px;padding:6px 14px">✅ Collected <span id="subCollectedCnt" style="background:#dcfce7;color:#166534;padding:1px 7px;border-radius:8px;font-size:10px"></span></button>
   </div>
 
+  <!-- Bulk email bar -->
+  <div class="bulk-bar">
+    <input type="checkbox" id="closeSelectAll" onchange="toggleTabSelectAll('close',this)" title="Select all visible rows"/>
+    <label>Select all visible</label>
+    <span class="sel-count" id="closeSelCount">0 selected</span>
+    <button class="btn-bulk-email" id="closeBulkEmailBtn" onclick="bulkEmailTab('close')" disabled>✉ Bulk Email Selected</button>
+  </div>
+
   <div class="tbl-wrap">
     <table id="tblClose">
       <thead><tr>
+        <th style="width:30px"></th>
         <th class="sortable" onclick="sortTable('close','apm')">APM <span class="sort-icon">⇅</span></th>
         <th>App Name</th>
         <th>Owner</th>
@@ -300,9 +335,17 @@ tr.collected-row td{background:#f0fdf4;opacity:.7}
 
 <!-- ── ISSUE / NEEDS WORK TAB ──────────────────────────────────────── -->
 <div class="tab-pane" id="paneIssue">
+  <!-- Bulk email bar -->
+  <div class="bulk-bar">
+    <input type="checkbox" id="issueSelectAll" onchange="toggleTabSelectAll('issue',this)" title="Select all visible rows"/>
+    <label>Select all visible</label>
+    <span class="sel-count" id="issueSelCount">0 selected</span>
+    <button class="btn-bulk-email" id="issueBulkEmailBtn" onclick="bulkEmailTab('issue')" disabled>✉ Bulk Email Selected</button>
+  </div>
   <div class="tbl-wrap">
     <table id="tblIssue">
       <thead><tr>
+        <th style="width:30px"></th>
         <th class="sortable" onclick="sortTable('issue','apm')">APM <span class="sort-icon">⇅</span></th>
         <th>App Name</th>
         <th>Owner</th>
@@ -322,6 +365,111 @@ tr.collected-row td{background:#f0fdf4;opacity:.7}
     </table>
     <div class="no-data hidden" id="noIssue">No records match current filters.</div>
   </div>
+</div>
+
+<!-- ── APM UNIVERSE TAB ──────────────────────────────────────────────── -->
+<div class="tab-pane" id="paneUniverse">
+
+  <!-- Bulk email bar -->
+  <div class="bulk-bar">
+    <input type="checkbox" id="selectAllUniverse" onchange="toggleSelectAllUniverse(this)" title="Select all visible rows"/>
+    <label>Select all visible</label>
+    <span class="sel-count" id="univSelCount">0 selected</span>
+    <button class="btn-bulk-email" id="bulkEmailBtn" onclick="bulkEmailUniverse()" disabled>✉ Bulk Email Selected</button>
+    <span style="margin-left:auto;font-size:11px;color:var(--muted)">
+      <span id="univNeedsCount" style="color:var(--red);font-weight:700">0</span> need finding &nbsp;·&nbsp;
+      <span id="univCanCount" style="color:var(--green);font-weight:700">0</span> can close &nbsp;·&nbsp;
+      <span id="univNoGrpCount" style="color:var(--muted)">0</span> no AD groups
+    </span>
+  </div>
+
+  <!-- Sub-tabs -->
+  <div class="u-subtabs">
+    <button class="u-subtab-btn" id="uTabNeeds" onclick="setUSubTab('needs')">
+      🔍 Generate Finding <span id="uCntNeeds" style="background:#fee2e2;color:#dc2626;padding:1px 7px;border-radius:8px;font-size:10px;margin-left:4px">0</span>
+    </button>
+    <button class="u-subtab-btn" id="uTabCan" onclick="setUSubTab('can')">
+      ✅ In MAR <span id="uCntCan" style="background:#dcfce7;color:#166534;padding:1px 7px;border-radius:8px;font-size:10px;margin-left:4px">0</span>
+    </button>
+    <button class="u-subtab-btn" id="uTabNo" onclick="setUSubTab('no')">
+      ⚪ No AD Groups <span id="uCntNo" style="background:#f3f4f6;color:#6b7280;padding:1px 7px;border-radius:8px;font-size:10px;margin-left:4px">0</span>
+    </button>
+  </div>
+
+  <!-- Needs Finding pane -->
+  <div class="u-pane" id="uPaneNeeds">
+    <!-- AD group source filter tabs -->
+    <div style="padding:8px 16px;border-bottom:1px solid var(--border);display:flex;gap:6px;align-items:center;flex-wrap:wrap;background:#fafbfc">
+      <span style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px">AD Group Source:</span>
+      <button class="pg-btn active" id="fAdAll"   onclick="setNeedsAdFilter('all')"       style="font-size:11px">All <span id="fAdAllCnt"  style="opacity:.7"></span></button>
+      <button class="pg-btn"        id="fAdKitt"  onclick="setNeedsAdFilter('kitt')"      style="font-size:11px">Kitt <span id="fAdKittCnt" style="opacity:.7"></span></button>
+      <button class="pg-btn"        id="fAdGcp"   onclick="setNeedsAdFilter('gcp')"       style="font-size:11px">GCP Groups <span id="fAdGcpCnt"  style="opacity:.7"></span></button>
+    </div>
+    <div class="tbl-wrap">
+      <table id="tblUNeeds">
+        <thead><tr>
+          <th style="width:30px"><input type="checkbox" id="chkNeedsAll" onchange="toggleSubTableSelect('needs',this)"/></th>
+          <th class="sortable" onclick="sortUTable('needs','apm')">APM <span class="sort-icon">⇅</span></th>
+          <th>App Name</th>
+          <th>Business Unit</th>
+          <th>Owner Email</th>
+          <th>AD Groups (not in MAR)</th>
+          <th>Sensitivity</th>
+          <th>PCI/SOX</th>
+          <th>Existing Finding</th>
+        </tr></thead>
+        <tbody id="bodyUNeeds"></tbody>
+      </table>
+      <div class="no-data hidden" id="noUNeeds">No records match current filters.</div>
+    </div>
+    <div class="univ-pagination" id="pgNeeds"></div>
+  </div>
+
+  <!-- Can Close pane -->
+  <div class="u-pane" id="uPaneCan">
+    <div class="tbl-wrap">
+      <table id="tblUCan">
+        <thead><tr>
+          <th style="width:30px"><input type="checkbox" id="chkCanAll" onchange="toggleSubTableSelect('can',this)"/></th>
+          <th class="sortable" onclick="sortUTable('can','apm')">APM <span class="sort-icon">⇅</span></th>
+          <th>App Name</th>
+          <th>Business Unit</th>
+          <th>Owner Email</th>
+          <th>Matched AD Group(s)</th>
+          <th>MAR Entitlements</th>
+          <th class="sortable" onclick="sortUTable('can','mar_user_count')">MAR Users <span class="sort-icon">⇅</span></th>
+          <th>Sensitivity</th>
+          <th>PCI/SOX</th>
+          <th>Existing Finding</th>
+        </tr></thead>
+        <tbody id="bodyUCan"></tbody>
+      </table>
+      <div class="no-data hidden" id="noUCan">No records match current filters.</div>
+    </div>
+    <div class="univ-pagination" id="pgCan"></div>
+  </div>
+
+  <!-- No AD Groups pane -->
+  <div class="u-pane" id="uPaneNo">
+    <div class="tbl-wrap">
+      <table id="tblUNo">
+        <thead><tr>
+          <th style="width:30px"><input type="checkbox" id="chkNoAll" onchange="toggleSubTableSelect('no',this)"/></th>
+          <th class="sortable" onclick="sortUTable('no','apm')">APM <span class="sort-icon">⇅</span></th>
+          <th>App Name</th>
+          <th>Business Unit</th>
+          <th>Owner Email</th>
+          <th>Sensitivity</th>
+          <th>PCI/SOX</th>
+          <th>Existing Finding</th>
+        </tr></thead>
+        <tbody id="bodyUNo"></tbody>
+      </table>
+      <div class="no-data hidden" id="noUNo">No records match current filters.</div>
+    </div>
+    <div class="univ-pagination" id="pgNo"></div>
+  </div>
+
 </div>
 
 </div><!-- .main -->
@@ -351,11 +499,12 @@ tr.collected-row td{background:#f0fdf4;opacity:.7}
       <button class="info-close" onclick="closeInfo()">&times;</button>
     </div>
     <div class="info-sec">
-      <h3>🎯 Two-Tab Workflow</h3>
+      <h3>🎯 Three-Tab Workflow</h3>
       <table class="info-tbl">
         <tr><th>Tab</th><th>Who it's for</th><th>Action</th></tr>
-        <tr><td><strong>✅ Can Close</strong></td><td>APMs with AD groups verified in MAR</td><td>Download CSV → upload to AuditBoard → check Done</td></tr>
-        <tr><td><strong>❌ Issue / Needs Work</strong></td><td>APMs with no MAR match</td><td>Issue UAR finding or follow up with owner</td></tr>
+        <tr><td><strong>✅ Can Close</strong></td><td>UAR APMs with AD groups verified in MAR</td><td>Download CSV → upload to AuditBoard → check Done</td></tr>
+        <tr><td><strong>❌ Issue / Needs Work</strong></td><td>UAR APMs with no MAR match</td><td>Issue UAR finding or follow up with owner</td></tr>
+        <tr><td><strong>🌐 APM Universe</strong></td><td>All 7,948 APMs — find which ones need new findings</td><td>Issue Finding sub-tab: select APMs → Bulk Email owners</td></tr>
       </table>
     </div>
     <div class="info-sec">
@@ -392,6 +541,7 @@ tr.collected-row td{background:#f0fdf4;opacity:.7}
 ════════════════════════════════════════════════════════════════════════ -->
 <script>
 const apmData = __APM_DATA__;
+const univData = __APM_UNIVERSE_DATA__;
 const STORAGE_KEY = 'sse_uar_collected';
 const CURRENT_QUARTER = '__CURRENT_QUARTER__';
 
@@ -405,6 +555,25 @@ let sortClose    = {col:'mar_user_count', asc:false};
 let sortIssue    = {col:'due_date', asc:true};
 let debTimer     = null;
 
+// ── Tab selection state (for bulk email) ──────────────────────────────────
+let closeSelected = new Set();
+let issueSelected = new Set();
+
+// ── APM Universe state ─────────────────────────────────────────────────────
+let uSubTab      = 'needs';   // 'needs' | 'can' | 'no'
+const U_PAGE_SIZE = 200;
+let uPage        = {needs:1, can:1, no:1};
+let uSort        = {needs:{col:'apm',asc:true}, can:{col:'mar_user_count',asc:false}, no:{col:'apm',asc:true}};
+let univSelected = new Set(); // apm IDs selected for bulk email
+
+const univNeeds = univData.filter(u => u.status === 'needs_finding');
+const univCan   = univData.filter(u => u.status === 'can_close');
+const univNo    = univData.filter(u => u.status === 'no_groups');
+
+// AD group source filter for Generate Finding pane
+// Values: 'all' | 'kitt' | 'gcp' | 'gcpp'
+let needsAdFilter = 'all';
+
 // ── Derived data ───────────────────────────────────────────────────────────
 const canCloseData = apmData.filter(a => a.pct === 100);
 const issueData    = apmData.filter(a => a.pct < 100);
@@ -412,7 +581,7 @@ const issueData    = apmData.filter(a => a.pct < 100);
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('hdrSub').textContent =
-    `${apmData.length} APMs · ${CURRENT_QUARTER} · ${canCloseData.length} ready to close · ${issueData.length} need action`;
+    `${apmData.length} UAR APMs · ${CURRENT_QUARTER} · ${canCloseData.length} ready to close · ${issueData.length} need action · ${univData.length} APMs in universe`;
 
   document.getElementById('statTotal').textContent   = apmData.length;
   document.getElementById('statClose').textContent   = canCloseData.length;
@@ -439,7 +608,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const rSel = document.getElementById('fSseReviewer');
   reviewers.forEach(r => { const o=document.createElement('option'); o.value=r; o.textContent=r; rSel.appendChild(o); });
 
+  // Universe tile stats
+  document.getElementById('cntUniverse').textContent = univData.length;
+  document.getElementById('statUnivNeeds').textContent = univNeeds.length.toLocaleString();
+  document.getElementById('univNeedsCount').textContent = univNeeds.length.toLocaleString();
+  document.getElementById('univCanCount').textContent = univCan.length.toLocaleString();
+  document.getElementById('univNoGrpCount').textContent = univNo.length.toLocaleString();
+
   applyFilters();
+  // Default universe sub-tab to 'needs' (primary use-case: find APMs to issue findings for)
+  setUSubTab('needs');
   // Init sort icons to show default sort direction
   setTimeout(()=>{ updateSortIcons('close',sortClose); updateSortIcons('issue',sortIssue); }, 0);
 });
@@ -627,11 +805,14 @@ function renderCloseTable(){
   }
   updateProgress();
   updateResultCount();
+  updateTabSelCount('close');
 }
 
 function makeCloseRow(rec){
   const isCollected = collectedSet.has(rec.apm);
+  const chk = closeSelected.has(rec.apm);
   return `<tr class="${isCollected?'collected-row':''}" onclick="openDrawer('${esc(rec.apm)}')">
+    <td><input type="checkbox" class="cb-done" ${chk?'checked':''} onclick="event.stopPropagation();toggleTabSelect('close','${esc(rec.apm)}',this)" title="Select for bulk email"/></td>
     <td><span class="col-apm">${esc(rec.apm)}</span></td>
     <td><div class="col-app">${esc(rec.app_name||rec.title)}</div></td>
     <td>${ownerCell(rec)}</td>
@@ -664,6 +845,7 @@ function renderIssueTable(){
     tbody.innerHTML = filtered.map(makeIssueRow).join('');
   }
   updateResultCount();
+  updateTabSelCount('issue');
 }
 
 function makeIssueRow(rec){
@@ -672,7 +854,9 @@ function makeIssueRow(rec){
   const lrBadge = lr==='Customer'?'<span class="badge b-purple">👤 Customer</span>':
                   lr==='SSE'?'<span class="badge b-blue">🔒 SSE</span>':
                   `<span class="badge b-gray">${esc(lr)}</span>`;
+  const chk = issueSelected.has(rec.apm);
   return `<tr onclick="openDrawer('${esc(rec.apm)}')">
+    <td><input type="checkbox" class="cb-done" ${chk?'checked':''} onclick="event.stopPropagation();toggleTabSelect('issue','${esc(rec.apm)}',this)" title="Select for bulk email"/></td>
     <td><span class="col-apm">${esc(rec.apm)}</span></td>
     <td><div class="col-app">${esc(rec.app_name||rec.title)}</div></td>
     <td>${ownerCell(rec)}</td>
@@ -693,12 +877,13 @@ function makeIssueRow(rec){
 // ── Tab switching ──────────────────────────────────────────────────────────
 function setTab(which){
   activeTab = which;
-  document.getElementById('tabClose').classList.toggle('active',  which==='close');
-  document.getElementById('tabIssue').classList.toggle('active',  which==='issue');
-  document.getElementById('paneClose').classList.toggle('active', which==='close');
-  document.getElementById('paneIssue').classList.toggle('active', which==='issue');
-  document.getElementById('quarterGroup').classList.toggle('hidden', which==='issue');
-  applyFilters();
+  ['close','issue','universe'].forEach(t => {
+    document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1))?.classList.toggle('active', t===which);
+    document.getElementById('pane'+t.charAt(0).toUpperCase()+t.slice(1))?.classList.toggle('active', t===which);
+  });
+  document.getElementById('quarterGroup').classList.toggle('hidden', which!=='close');
+  if(which==='universe') renderUniverse();
+  else applyFilters();
 }
 
 function setSubTab(which){
@@ -864,6 +1049,418 @@ function showToast(msg){
   t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 2800);
 }
+
+// ── Bulk email for Can Close & Issue tabs ─────────────────────────────────
+function toggleTabSelect(tab, apm, cb){
+  const sel = tab==='close' ? closeSelected : issueSelected;
+  if(cb.checked) sel.add(apm); else sel.delete(apm);
+  updateTabSelCount(tab);
+}
+
+function toggleTabSelectAll(tab, masterCb){
+  const sel  = tab==='close' ? closeSelected : issueSelected;
+  const data = tab==='close'
+    ? sortData(canCloseData.filter(filterRec), sortClose).filter(r => activeSubTab==='pending' ? !collectedSet.has(r.apm) : collectedSet.has(r.apm))
+    : sortData(issueData.filter(filterRec), sortIssue);
+  data.forEach(r => { if(masterCb.checked) sel.add(r.apm); else sel.delete(r.apm); });
+  if(tab==='close') renderCloseTable(); else renderIssueTable();
+}
+
+function updateTabSelCount(tab){
+  const sel = tab==='close' ? closeSelected : issueSelected;
+  const n = sel.size;
+  document.getElementById(tab+'SelCount').textContent = n+' selected';
+  document.getElementById(tab+'BulkEmailBtn').disabled = (n===0);
+}
+
+function bulkEmailTab(tab){
+  const sel  = tab==='close' ? closeSelected : issueSelected;
+  const data = tab==='close' ? canCloseData : issueData;
+  const selected = data.filter(r => sel.has(r.apm));
+  if(!selected.length){ showToast('No APMs selected.'); return; }
+
+  // Group by owner email
+  const byEmail = {};
+  selected.forEach(r => {
+    const e = r.email||'';
+    if(!e||!e.includes('@')) return;
+    (byEmail[e] = byEmail[e]||[]).push(r);
+  });
+
+  const MAX_BODY = 1800;
+  let opened = 0;
+  const noEmail = selected.filter(r => !r.email||!r.email.includes('@'));
+
+  Object.entries(byEmail).forEach(([email, apms]) => {
+    const isClose = tab==='close';
+    const subject = encodeURIComponent(
+      isClose ? 'UAR Finding Ready to Close — MAR Evidence Available'
+              : 'UAR Finding Action Required — No MAR Evidence Found'
+    );
+    const bodyLines = isClose ? [
+      'Hello,',
+      '',
+      'The following application(s) have UAR findings ready to close.',
+      'MAR evidence has been verified and is available for upload to AuditBoard:',
+      '',
+      ...apms.map(r => `  • ${r.apm}  ${r.app_name||r.title}  [Due: ${(r.due_date||'').substring(0,10)||'—'}]`),
+      '',
+      'Please confirm the finding(s) can be closed in AuditBoard.',
+      '',
+      'SSE Global Compliance',
+    ] : [
+      'Hello,',
+      '',
+      'The following application(s) have UAR findings that require action.',
+      'No MAR evidence was found matching the registered AD groups:',
+      '',
+      ...apms.map(r => `  • ${r.apm}  ${r.app_name||r.title}  [Groups: ${(r.all_ad_groups||'').replace(/\|/g,', ')}]`),
+      '',
+      'Please review and provide access entitlement data, or confirm no active users exist.',
+      '',
+      'SSE Global Compliance',
+    ];
+    const body = bodyLines.join('\n');
+    const encodedBody = encodeURIComponent(body);
+
+    if(encodedBody.length <= MAX_BODY){
+      window.open(`mailto:${email}?subject=${subject}&body=${encodedBody}`, '_blank');
+    } else {
+      const shortBody = encodeURIComponent(
+        `Hello,\n\nYou have ${apms.length} APM(s) requiring attention (full list too long — see clipboard).\n\nSSE Global Compliance`
+      );
+      try {
+        navigator.clipboard.writeText(body).then(()=>{
+          window.open(`mailto:${email}?subject=${subject}&body=${shortBody}`, '_blank');
+          showToast(`📋 Full list copied to clipboard for ${email}`);
+        });
+      } catch(e){
+        window.open(`mailto:${email}?subject=${subject}&body=${shortBody}`, '_blank');
+      }
+    }
+    opened++;
+  });
+
+  const warn = noEmail.length ? ` (${noEmail.length} had no email)` : '';
+  showToast(`✉ ${opened} email draft(s) opened${warn}`);
+}
+
+// ── APM Universe ──────────────────────────────────────────────────────────
+
+function setUSubTab(which){
+  uSubTab = which;
+  ['needs','can','no'].forEach(t => {
+    document.getElementById('uTab'+t.charAt(0).toUpperCase()+t.slice(1))?.classList.toggle('active', t===which);
+    document.getElementById('uPane'+t.charAt(0).toUpperCase()+t.slice(1))?.classList.toggle('active', t===which);
+  });
+  scheduleRenderUCurrent();
+}
+
+function renderUniverse(){
+  document.getElementById('uCntNeeds').textContent = univNeeds.length.toLocaleString();
+  document.getElementById('uCntCan').textContent   = univCan.length.toLocaleString();
+  document.getElementById('uCntNo').textContent    = univNo.length.toLocaleString();
+  // Populate AD source filter counts
+  const srcs = {all: univNeeds.length, kitt:0, gcp:0};
+  univNeeds.forEach(r => {
+    if(hasAdSource(r,'kitt')) srcs.kitt++;
+    if(hasAdSource(r,'gcp'))  srcs.gcp++;
+  });
+  document.getElementById('fAdAllCnt').textContent  = `(${srcs.all})`;
+  document.getElementById('fAdKittCnt').textContent = `(${srcs.kitt})`;
+  document.getElementById('fAdGcpCnt').textContent  = `(${srcs.gcp})`;
+  scheduleRenderUCurrent();
+}
+
+function getUDataset(){
+  return uSubTab==='needs' ? univNeeds : uSubTab==='can' ? univCan : univNo;
+}
+
+// AD source columns stored on each record (populated in load_apm_universe)
+// kitt_ad_group  → rec.kitt_group
+// gcp_owner      → rec.gcp_group
+// gcp_prod       → rec.gcpp_group
+// We detect which source an APM's unmatched groups came from by checking
+// whether the unmatched_groups string contains any group from each source col.
+function hasAdSource(rec, src){
+  if(src === 'all') return true;
+  const unmatched = (rec.unmatched_groups||rec.all_ad_groups||'').toLowerCase();
+  if(!unmatched) return false;
+  // Map source key to the raw field name stored by Python
+  const fieldMap = {kitt:'kitt_group', gcp:['gcp_group','gcpp_group']};
+  const fields = fieldMap[src];
+  if(!fields) return true;
+  const fieldList = Array.isArray(fields) ? fields : [fields];
+  const unmatchedSet = new Set(unmatched.split('|').filter(Boolean));
+  return fieldList.some(field => {
+    const val = (rec[field]||'').toLowerCase().trim();
+    if(!val || val === 'none' || val === 'null' || val === '[]') return false;
+    return val.split('|').filter(Boolean).some(g => unmatchedSet.has(g));
+  });
+}
+
+function setNeedsAdFilter(src){
+  needsAdFilter = src;
+  // Update button styles
+  ['all','kitt','gcp'].forEach(k => {
+    const btn = document.getElementById('fAd'+k.charAt(0).toUpperCase()+k.slice(1));
+    if(btn) btn.classList.toggle('active', k===src);
+  });
+  uPage.needs = 1;
+  scheduleRenderUCurrent();
+}
+
+function uFilterRec(rec){
+  // AD source filter (only applies to needs sub-tab)
+  if(uSubTab === 'needs' && needsAdFilter !== 'all'){
+    if(!hasAdSource(rec, needsAdFilter)) return false;
+  }
+  if(!searchQ) return true;
+  const q = searchQ.toLowerCase();
+  return [rec.apm, rec.app_name, rec.business_unit, rec.owner_email, rec.all_ad_groups].join(' ').toLowerCase().includes(q);
+}
+
+let _univRafId = null;
+function scheduleRenderUCurrent(){
+  if(_univRafId) cancelAnimationFrame(_univRafId);
+  _univRafId = requestAnimationFrame(() => { _univRafId = null; renderUCurrent(); });
+}
+
+function renderUCurrent(){
+  const dataset = sortUData(getUDataset().filter(uFilterRec), uSort[uSubTab]);
+  const tab = uSubTab;
+  const pg = uPage[tab];
+  const total = dataset.length;
+  const pages = Math.max(1, Math.ceil(total / U_PAGE_SIZE));
+  const start = (pg-1)*U_PAGE_SIZE;
+  const slice = dataset.slice(start, start+U_PAGE_SIZE);
+
+  const bodyId = 'bodyU'+tab.charAt(0).toUpperCase()+tab.slice(1);
+  const noId   = 'noU'+tab.charAt(0).toUpperCase()+tab.slice(1);
+  const pgId   = 'pg'+tab.charAt(0).toUpperCase()+tab.slice(1);
+  const tbody  = document.getElementById(bodyId);
+  const noDiv  = document.getElementById(noId);
+  const pgDiv  = document.getElementById(pgId);
+
+  if(!slice.length){
+    tbody.innerHTML = '';
+    noDiv.classList.remove('hidden');
+  } else {
+    noDiv.classList.add('hidden');
+    if(tab==='needs')  tbody.innerHTML = slice.map(makeUNeedsRow).join('');
+    else if(tab==='can') tbody.innerHTML = slice.map(makeUCanRow).join('');
+    else               tbody.innerHTML = slice.map(makeUNoRow).join('');
+  }
+
+  // Pagination
+  pgDiv.innerHTML = renderPagination(pg, pages, total, tab);
+  updateUnivSelCount();
+}
+
+function renderPagination(pg, pages, total, tab){
+  if(pages<=1) return `<span class="pg-info">Showing all ${total.toLocaleString()} records</span>`;
+  let html = `<span class="pg-info">${total.toLocaleString()} records</span>`;
+  html += `<button class="pg-btn" ${pg<=1?'disabled':''} onclick="goUPage('${tab}',${pg-1})">‹ Prev</button>`;
+  // Show up to 7 page buttons
+  const lo = Math.max(1, pg-3), hi = Math.min(pages, lo+6);
+  for(let i=lo;i<=hi;i++){
+    html += `<button class="pg-btn${i===pg?' active':''}" onclick="goUPage('${tab}',${i})">${i}</button>`;
+  }
+  html += `<button class="pg-btn" ${pg>=pages?'disabled':''} onclick="goUPage('${tab}',${pg+1})">Next ›</button>`;
+  html += `<span class="pg-info">Page ${pg} of ${pages}</span>`;
+  return html;
+}
+
+function goUPage(tab, pg){
+  uPage[tab] = pg;
+  if(tab!==uSubTab) uSubTab=tab;
+  renderUCurrent();
+}
+
+function sortUTable(tab, col){
+  const s = uSort[tab];
+  if(s.col===col) s.asc=!s.asc; else { s.col=col; s.asc=col!=='mar_user_count'; }
+  uPage[tab]=1;
+  renderUCurrent();
+  updateUSortIcons(tab, s);
+}
+function sortUData(arr, s){
+  return [...arr].sort((a,b)=>{
+    let va=a[s.col]||'', vb=b[s.col]||'';
+    if(typeof va==='number'&&typeof vb==='number') return s.asc?va-vb:vb-va;
+    va=String(va).toLowerCase(); vb=String(vb).toLowerCase();
+    return s.asc?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0);
+  });
+}
+function updateUSortIcons(tab, s){
+  const ids = {needs:'tblUNeeds', can:'tblUCan', no:'tblUNo'};
+  const tbl = document.getElementById(ids[tab]);
+  if(!tbl) return;
+  tbl.querySelectorAll('th.sortable').forEach(th=>{
+    const icon = th.querySelector('.sort-icon');
+    if(!icon) return;
+    const isActive = (th.getAttribute('onclick')||'').includes(`'${s.col}'`);
+    icon.textContent = isActive?(s.asc?'▲':'▼'):'⇅';
+    icon.style.opacity = isActive?'1':'.4';
+  });
+}
+
+function univExistingBadge(rec){
+  return rec.has_existing_finding ? '<span class="finding-badge">📋 Has Finding</span>' : '';
+}
+function univOwnerCell(rec){
+  const e = rec.owner_email||'';
+  if(e&&e.includes('@')) return `<a href="mailto:${esc(e)}" onclick="event.stopPropagation()" style="color:var(--blue);text-decoration:none;font-size:11px">${esc(e)}</a>`;
+  return `<span style="color:var(--muted);font-size:11px">${esc(rec.owner_name||'—')}</span>`;
+}
+function univCheckbox(apm){
+  const checked = univSelected.has(apm);
+  return `<input type="checkbox" class="cb-done" ${checked?'checked':''} onclick="event.stopPropagation();toggleUnivSelect('${esc(apm)}',this)" title="Select for bulk email"/>`;
+}
+
+function makeUNeedsRow(rec){
+  const groups = rec.unmatched_groups||rec.all_ad_groups||'';
+  return `<tr>
+    <td>${univCheckbox(rec.apm)}</td>
+    <td><span class="col-apm">${esc(rec.apm)}</span></td>
+    <td><div class="col-app">${esc(rec.app_name)}</div></td>
+    <td>${esc(rec.business_unit||'—')}</td>
+    <td>${univOwnerCell(rec)}</td>
+    <td class="col-adgroups">${groups?adChips(groups,'red'):'<span class="badge b-gray">None</span>'}</td>
+    <td>${sensitivityBadge(rec.sens_level)}</td>
+    <td>${pciSoxBadge(rec)}</td>
+    <td>${univExistingBadge(rec)}</td>
+  </tr>`;
+}
+function makeUCanRow(rec){
+  return `<tr>
+    <td>${univCheckbox(rec.apm)}</td>
+    <td><span class="col-apm">${esc(rec.apm)}</span></td>
+    <td><div class="col-app">${esc(rec.app_name)}</div></td>
+    <td>${esc(rec.business_unit||'—')}</td>
+    <td>${univOwnerCell(rec)}</td>
+    <td class="col-adgroups">${adChips(rec.matched_groups||rec.all_ad_groups,'green')}</td>
+    <td class="col-mar">${esc((rec.mar_entitlements||'').substring(0,80))}</td>
+    <td class="col-users">${(rec.mar_user_count||0).toLocaleString()}</td>
+    <td>${sensitivityBadge(rec.sens_level)}</td>
+    <td>${pciSoxBadge(rec)}</td>
+    <td>${univExistingBadge(rec)}</td>
+  </tr>`;
+}
+function makeUNoRow(rec){
+  return `<tr>
+    <td>${univCheckbox(rec.apm)}</td>
+    <td><span class="col-apm">${esc(rec.apm)}</span></td>
+    <td><div class="col-app">${esc(rec.app_name)}</div></td>
+    <td>${esc(rec.business_unit||'—')}</td>
+    <td>${univOwnerCell(rec)}</td>
+    <td>${sensitivityBadge(rec.sens_level)}</td>
+    <td>${pciSoxBadge(rec)}</td>
+    <td>${univExistingBadge(rec)}</td>
+  </tr>`;
+}
+
+// ── Universe selection & bulk email ────────────────────────────────────────
+function toggleUnivSelect(apm, cb){
+  if(cb.checked) univSelected.add(apm); else univSelected.delete(apm);
+  updateUnivSelCount();
+}
+function toggleSelectAllUniverse(masterCb){
+  const dataset = sortUData(getUDataset().filter(uFilterRec), uSort[uSubTab]);
+  const pg = uPage[uSubTab];
+  const start = (pg-1)*U_PAGE_SIZE;
+  const slice = dataset.slice(start, start+U_PAGE_SIZE);
+  slice.forEach(rec => { if(masterCb.checked) univSelected.add(rec.apm); else univSelected.delete(rec.apm); });
+  renderUCurrent();
+}
+function toggleSubTableSelect(tab, cb){
+  const dataset = sortUData(getUDataset().filter(uFilterRec), uSort[uSubTab]);
+  const pg = uPage[uSubTab];
+  const start = (pg-1)*U_PAGE_SIZE;
+  const slice = dataset.slice(start, start+U_PAGE_SIZE);
+  slice.forEach(rec => { if(cb.checked) univSelected.add(rec.apm); else univSelected.delete(rec.apm); });
+  renderUCurrent();
+}
+function updateUnivSelCount(){
+  const n = univSelected.size;
+  document.getElementById('univSelCount').textContent = n+' selected';
+  document.getElementById('bulkEmailBtn').disabled = (n===0);
+}
+
+function bulkEmailUniverse(){
+  const selected = univData.filter(u => univSelected.has(u.apm));
+  if(!selected.length){ showToast('No APMs selected.'); return; }
+
+  // Group by owner email
+  const byEmail = {};
+  selected.forEach(u => {
+    const e = u.owner_email;
+    if(!e||!e.includes('@')) return;
+    (byEmail[e] = byEmail[e]||[]).push(u);
+  });
+
+  const noEmail = selected.filter(u => !u.owner_email||!u.owner_email.includes('@'));
+
+  const entries = Object.entries(byEmail);
+  if(!entries.length){
+    showToast('No valid email addresses in selection.');
+    return;
+  }
+
+  const MAX_BODY = 1800; // safe mailto body limit
+  let opened = 0;
+
+  entries.forEach(([email, apms]) => {
+    const subject = encodeURIComponent('UAR Finding Required — AD Groups Not in MAR');
+    const bodyLines = [
+      'Hello,',
+      '',
+      'The following application(s) require a User Access Review (UAR) finding because',
+      'their AD group(s) were not found in the Monthly Access Review (MAR) evidence:',
+      '',
+      ...apms.map(u => `  • ${u.apm}  ${u.app_name}  [${u.all_ad_groups.replace(/\|/g,', ')}]`),
+      '',
+      'Please review access and update the entitlement data accordingly.',
+      '',
+      'SSE Global Compliance',
+    ];
+    const body = bodyLines.join('\n');
+    const encodedBody = encodeURIComponent(body);
+
+    if(encodedBody.length <= MAX_BODY){
+      window.open(`mailto:${email}?subject=${subject}&body=${encodedBody}`, '_blank');
+    } else {
+      // Clipboard fallback for long bodies
+      const shortBody = encodeURIComponent(
+        `Hello,\n\nYou have ${apms.length} APM(s) requiring UAR findings (list too long for email — see clipboard).\n\nSSE Global Compliance`
+      );
+      try {
+        navigator.clipboard.writeText(body).then(()=>{
+          window.open(`mailto:${email}?subject=${subject}&body=${shortBody}`, '_blank');
+          showToast(`📋 Full APM list copied to clipboard for ${email}`);
+        });
+      } catch(e){
+        window.open(`mailto:${email}?subject=${subject}&body=${shortBody}`, '_blank');
+        showToast(`⚠ Clipboard unavailable — short email opened for ${email}`);
+      }
+    }
+    opened++;
+  });
+
+  if(noEmail.length){
+    showToast(`✉ ${opened} email(s) opened. ${noEmail.length} APMs had no email.`);
+  } else {
+    showToast(`✉ ${opened} email draft(s) opened.`);
+  }
+}
+
+// ── Universe search integration ────────────────────────────────────────────
+// Piggyback on the global applyFilters() — Universe re-renders when searchQ changes
+const _origApplyFilters = applyFilters;
+applyFilters = function(){
+  _origApplyFilters();
+  if(activeTab==='universe') renderUniverse();
+};
 
 // ── Auto-refresh: checks GitHub for a newer build every 5 minutes ──────────
 // Compares the current page's Last-Modified header against a HEAD request
