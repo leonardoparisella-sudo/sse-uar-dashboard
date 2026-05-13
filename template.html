@@ -279,6 +279,9 @@ tr.collected-row td{background:#f0fdf4;opacity:.7}
   <button class="tab-btn" id="tabIssue" onclick="setTab('issue')">
     ❌ Issue / Needs Work <span id="cntIssue" style="background:#fee2e2;color:#dc2626;padding:1px 7px;border-radius:8px;font-size:11px;margin-left:4px">0</span>
   </button>
+  <button class="tab-btn" id="tabSummary" onclick="setTab('summary')" title="UAR coverage snapshot — clickable tiles drill into Universe">
+    📊 Summary
+  </button>
   <button class="tab-btn" id="tabUniverse" onclick="setTab('universe')" title="All 7,948 APMs — find which ones need new UAR findings">
     🌐 APM Universe <span id="cntUniverse" style="background:#ede9fe;color:#6b21a8;padding:1px 7px;border-radius:8px;font-size:11px;margin-left:4px">0</span>
   </button>
@@ -364,6 +367,194 @@ tr.collected-row td{background:#f0fdf4;opacity:.7}
       <tbody id="bodyIssue"></tbody>
     </table>
     <div class="no-data hidden" id="noIssue">No records match current filters.</div>
+  </div>
+</div>
+
+<!-- ── SUMMARY TAB ────────────────────────────────────────────────────── -->
+<div class="tab-pane" id="paneSummary">
+  <div style="max-width:1200px;margin:0 auto;padding:20px 16px 32px">
+
+    <!-- Header row -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:8px">
+      <h2 style="font-size:16px;font-weight:700;color:#1e293b;margin:0">UAR Coverage Snapshot</h2>
+      <span style="font-size:11px;color:#64748b">Click any tile to drill into the APM Universe view</span>
+    </div>
+
+    <!-- TOTAL APM TILE -->
+    <div onclick="setTab('universe')" title="View all APMs"
+      style="cursor:pointer;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px 22px;
+             margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;
+             box-shadow:0 1px 4px rgba(0,0,0,.07);transition:box-shadow .15s"
+      onmouseover="this.style.boxShadow='0 4px 14px rgba(0,0,0,.13)'"
+      onmouseout="this.style.boxShadow='0 1px 4px rgba(0,0,0,.07)'">
+      <div>
+        <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Total APMs in Universe</div>
+        <div id="smryTotal" style="font-size:36px;font-weight:900;color:#0053e2">—</div>
+      </div>
+      <span style="font-size:28px;opacity:.18">🏢</span>
+    </div>
+
+    <!-- 3-COLUMN TILES -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px">
+
+      <!-- COL 1: Status -->
+      <section>
+        <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b21a8;margin-bottom:10px;padding-left:2px">Status</div>
+        <div style="display:flex;flex-col gap:10px;flex-direction:column;gap:8px">
+
+          <div onclick="setTab('universe');setUSubTab('can')" title="APMs with MAR evidence — ready to close"
+            style="cursor:pointer;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 16px;
+                   display:flex;justify-content:space-between;align-items:center;transition:box-shadow .15s"
+            onmouseover="this.style.boxShadow='0 3px 10px rgba(0,0,0,.1)'"
+            onmouseout="this.style.boxShadow='none'">
+            <div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#166534;margin-bottom:3px">✅ Can Close</div>
+              <div id="smryCanClose" style="font-size:26px;font-weight:800;color:#166534">—</div>
+              <div style="font-size:10px;color:#4ade80;margin-top:2px">MAR evidence verified → Universe</div>
+            </div>
+            <span style="font-size:22px;opacity:.25">📁</span>
+          </div>
+
+          <div onclick="setTab('universe');setUSubTab('needs')" title="APMs that need a UAR finding issued"
+            style="cursor:pointer;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 16px;
+                   display:flex;justify-content:space-between;align-items:center;transition:box-shadow .15s"
+            onmouseover="this.style.boxShadow='0 3px 10px rgba(0,0,0,.1)'"
+            onmouseout="this.style.boxShadow='none'">
+            <div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#dc2626;margin-bottom:3px">🔍 Needs Finding</div>
+              <div id="smryNeedsFind" style="font-size:26px;font-weight:800;color:#dc2626">—</div>
+              <div style="font-size:10px;color:#f87171;margin-top:2px">AD groups not in MAR → issue UAR finding</div>
+            </div>
+            <span style="font-size:22px;opacity:.25">📋</span>
+          </div>
+
+          <div onclick="setTab('universe');setUSubTab('no')" title="APMs with no AD groups — cannot be resolved via MAR"
+            style="cursor:pointer;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;
+                   display:flex;justify-content:space-between;align-items:center;transition:box-shadow .15s"
+            onmouseover="this.style.boxShadow='0 3px 10px rgba(0,0,0,.1)'"
+            onmouseout="this.style.boxShadow='none'">
+            <div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin-bottom:3px">⚪ No AD Groups</div>
+              <div id="smryNoGroups" style="font-size:26px;font-weight:800;color:#64748b">—</div>
+              <div style="font-size:10px;color:#94a3b8;margin-top:2px">No AD group on file → escalation needed</div>
+            </div>
+            <span style="font-size:22px;opacity:.25">❓</span>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- COL 2: AD Source (among Needs Finding) -->
+      <section>
+        <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#0284c7;margin-bottom:10px;padding-left:2px">AD Source — Needs Finding</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+
+          <div onclick="setTab('universe');setUSubTab('needs');setNeedsAdFilter('kitt')" title="APMs with Kitt AD groups needing a finding"
+            style="cursor:pointer;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:14px 16px;
+                   display:flex;justify-content:space-between;align-items:center;transition:box-shadow .15s"
+            onmouseover="this.style.boxShadow='0 3px 10px rgba(0,0,0,.1)'"
+            onmouseout="this.style.boxShadow='none'">
+            <div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#0369a1;margin-bottom:3px">Kitt</div>
+              <div id="smryKitt" style="font-size:26px;font-weight:800;color:#0369a1">—</div>
+              <div style="font-size:10px;color:#7dd3fc;margin-top:2px">kitt.yml AD group → filter</div>
+            </div>
+            <span style="font-size:22px;opacity:.25">🔑</span>
+          </div>
+
+          <div onclick="setTab('universe');setUSubTab('needs');setNeedsAdFilter('gcp')" title="APMs with GCP AD groups needing a finding"
+            style="cursor:pointer;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 16px;
+                   display:flex;justify-content:space-between;align-items:center;transition:box-shadow .15s"
+            onmouseover="this.style.boxShadow='0 3px 10px rgba(0,0,0,.1)'"
+            onmouseout="this.style.boxShadow='none'">
+            <div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#15803d;margin-bottom:3px">GCP Groups</div>
+              <div id="smryGcp" style="font-size:26px;font-weight:800;color:#15803d">—</div>
+              <div style="font-size:10px;color:#4ade80;margin-top:2px">GCP Owner or Prod Owner → filter</div>
+            </div>
+            <span style="font-size:22px;opacity:.25">☁️</span>
+          </div>
+
+          <div onclick="setTab('universe');setUSubTab('needs');setNeedsAdFilter('az')" title="APMs with Azure AD groups needing a finding"
+            style="cursor:pointer;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;padding:14px 16px;
+                   display:flex;justify-content:space-between;align-items:center;transition:box-shadow .15s"
+            onmouseover="this.style.boxShadow='0 3px 10px rgba(0,0,0,.1)'"
+            onmouseout="this.style.boxShadow='none'">
+            <div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6d28d9;margin-bottom:3px">Azure AD</div>
+              <div id="smryAz" style="font-size:26px;font-weight:800;color:#6d28d9">—</div>
+              <div style="font-size:10px;color:#c4b5fd;margin-top:2px">AZ_AD_Groups → filter</div>
+            </div>
+            <span style="font-size:22px;opacity:.25">🔷</span>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- COL 3: Priority (among Needs Finding) -->
+      <section>
+        <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#b45309;margin-bottom:10px;padding-left:2px">Priority — Needs Finding</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+
+          <div onclick="setTab('universe');setUSubTab('needs')" data-smry-filter="hs" title="Highly Sensitive APMs needing a finding — address first"
+            style="cursor:pointer;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px 16px;
+                   display:flex;justify-content:space-between;align-items:center;transition:box-shadow .15s"
+            onmouseover="this.style.boxShadow='0 3px 10px rgba(0,0,0,.1)'"
+            onmouseout="this.style.boxShadow='none'">
+            <div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#b45309;margin-bottom:3px">🔴 Highly Sensitive</div>
+              <div id="smryHs" style="font-size:26px;font-weight:800;color:#b45309">—</div>
+              <div style="font-size:10px;color:#fb923c;margin-top:2px">Highest data sensitivity → prioritize</div>
+            </div>
+            <span style="font-size:22px;opacity:.25">🚨</span>
+          </div>
+
+          <div onclick="setTab('universe');setUSubTab('needs')" data-smry-filter="pci_sox" title="PCI/SOX flagged APMs needing a finding"
+            style="cursor:pointer;background:#fefce8;border:1px solid #fef08a;border-radius:10px;padding:14px 16px;
+                   display:flex;justify-content:space-between;align-items:center;transition:box-shadow .15s"
+            onmouseover="this.style.boxShadow='0 3px 10px rgba(0,0,0,.1)'"
+            onmouseout="this.style.boxShadow='none'">
+            <div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#854d0e;margin-bottom:3px">💳 PCI / 📊 SOX</div>
+              <div id="smryPciSox" style="font-size:26px;font-weight:800;color:#854d0e">—</div>
+              <div style="font-size:10px;color:#facc15;margin-top:2px">Compliance-flagged APMs → act first</div>
+            </div>
+            <span style="font-size:22px;opacity:.25">⚖️</span>
+          </div>
+
+          <div onclick="setTab('universe');setUSubTab('needs')" data-smry-filter="no_finding" title="APMs needing a finding with no existing finding yet"
+            style="cursor:pointer;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 16px;
+                   display:flex;justify-content:space-between;align-items:center;transition:box-shadow .15s"
+            onmouseover="this.style.boxShadow='0 3px 10px rgba(0,0,0,.1)'"
+            onmouseout="this.style.boxShadow='none'">
+            <div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#b91c1c;margin-bottom:3px">🆕 No Finding Yet</div>
+              <div id="smryNoFinding" style="font-size:26px;font-weight:800;color:#b91c1c">—</div>
+              <div style="font-size:10px;color:#f87171;margin-top:2px">Not in current UAR cycle → create finding</div>
+            </div>
+            <span style="font-size:22px;opacity:.25">📝</span>
+          </div>
+
+        </div>
+      </section>
+
+    </div><!-- /grid -->
+
+    <!-- Coverage bar -->
+    <div style="margin-top:24px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px">
+        <span style="font-size:11px;font-weight:700;color:#1e293b">MAR Coverage across all APMs with AD groups</span>
+        <span id="smryCovPct" style="font-size:13px;font-weight:800;color:#0053e2">—%</span>
+      </div>
+      <div style="height:10px;background:#f1f5f9;border-radius:6px;overflow:hidden">
+        <div id="smryCovBar" style="height:100%;width:0%;background:linear-gradient(90deg,#0053e2,#2a8703);border-radius:6px;transition:width .6s ease"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:#94a3b8">
+        <span id="smryCovLabel">Can Close / APMs with AD groups</span>
+        <span onclick="setTab('universe');setNeedsAdFilter('all')" style="cursor:pointer;color:#0053e2;font-weight:600">View Needs Finding →</span>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -878,13 +1069,50 @@ function makeIssueRow(rec){
 // ── Tab switching ──────────────────────────────────────────────────────────
 function setTab(which){
   activeTab = which;
-  ['close','issue','universe'].forEach(t => {
+  ['close','issue','summary','universe'].forEach(t => {
     document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1))?.classList.toggle('active', t===which);
     document.getElementById('pane'+t.charAt(0).toUpperCase()+t.slice(1))?.classList.toggle('active', t===which);
   });
   document.getElementById('quarterGroup').classList.toggle('hidden', which!=='close');
   if(which==='universe') renderUniverse();
+  else if(which==='summary') renderSummary();
   else applyFilters();
+}
+
+// ── Summary tab renderer ──────────────────────────────────────────────────
+function renderSummary(){
+  const needs = univNeeds;
+  const can   = univCan;
+  const no    = univNo;
+  const total = univData.length;
+
+  document.getElementById('smryTotal').textContent     = total.toLocaleString();
+  document.getElementById('smryCanClose').textContent  = can.length.toLocaleString();
+  document.getElementById('smryNeedsFind').textContent = needs.length.toLocaleString();
+  document.getElementById('smryNoGroups').textContent  = no.length.toLocaleString();
+
+  // AD source counts (among needs_finding)
+  const fieldMap = {kitt:'kitt_group', gcp:['gcp_group','gcpp_group'], az:'az_group'};
+  function countSrc(src){
+    const fields = fieldMap[src];
+    if(Array.isArray(fields)) return needs.filter(u => fields.some(f => u[f] && u[f].trim())).length;
+    return needs.filter(u => u[fields] && u[fields].trim()).length;
+  }
+  document.getElementById('smryKitt').textContent = countSrc('kitt').toLocaleString();
+  document.getElementById('smryGcp').textContent  = countSrc('gcp').toLocaleString();
+  document.getElementById('smryAz').textContent   = countSrc('az').toLocaleString();
+
+  // Priority counts (among needs_finding)
+  document.getElementById('smryHs').textContent        = needs.filter(u => u.sens_level === 'highly_sensitive').length.toLocaleString();
+  document.getElementById('smryPciSox').textContent    = needs.filter(u => u.pci || u.sox).length.toLocaleString();
+  document.getElementById('smryNoFinding').textContent = needs.filter(u => !u.has_existing_finding).length.toLocaleString();
+
+  // Coverage bar: can_close / (can_close + needs_finding)  [excludes no-group APMs]
+  const withGroups = can.length + needs.length;
+  const pct = withGroups ? Math.round(can.length / withGroups * 100) : 0;
+  document.getElementById('smryCovPct').textContent   = pct + '%';
+  document.getElementById('smryCovBar').style.width   = pct + '%';
+  document.getElementById('smryCovLabel').textContent = `${can.length.toLocaleString()} can close of ${withGroups.toLocaleString()} APMs with AD groups`;
 }
 
 function setSubTab(which){
