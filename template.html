@@ -338,6 +338,14 @@ tr.collected-row td{background:#f0fdf4;opacity:.7}
 
 <!-- ── ISSUE / NEEDS WORK TAB ──────────────────────────────────────── -->
 <div class="tab-pane" id="paneIssue">
+
+  <!-- Needs Work sub-tabs (Partial stays in main table; pct===0 split here) -->
+  <div style="display:flex;gap:2px;padding:10px 16px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
+    <button class="tab-btn active" id="issueSubAll"    onclick="setIssueSubTab('all')"    style="font-size:12px;padding:6px 14px">All <span id="issueSubAllCnt"    style="background:#fee2e2;color:#dc2626;padding:1px 7px;border-radius:8px;font-size:10px"></span></button>
+    <button class="tab-btn"        id="issueSubHasAd"  onclick="setIssueSubTab('has_ad')" style="font-size:12px;padding:6px 14px">🔴 Has AD Group <span id="issueSubHasAdCnt"  style="background:#fee2e2;color:#dc2626;padding:1px 7px;border-radius:8px;font-size:10px"></span></button>
+    <button class="tab-btn"        id="issueSubNoAd"   onclick="setIssueSubTab('no_ad')"  style="font-size:12px;padding:6px 14px">⚫ No AD Group <span id="issueSubNoAdCnt"   style="background:#f3f4f6;color:#6b7280;padding:1px 7px;border-radius:8px;font-size:10px"></span></button>
+  </div>
+
   <!-- Bulk email bar -->
   <div class="bulk-bar">
     <input type="checkbox" id="issueSelectAll" onchange="toggleTabSelectAll('issue',this)" title="Select all visible rows"/>
@@ -1025,11 +1033,42 @@ function makeCloseRow(rec){
   </tr>`;
 }
 
+// ── Issue sub-tab (Needs Work split) ──────────────────────────────────────
+let issueSubTab = 'all'; // 'all' | 'has_ad' | 'no_ad'
+
+function setIssueSubTab(which){
+  issueSubTab = which;
+  ['all','has_ad','no_ad'].forEach(t => {
+    const id = 'issueSubAll has_ad→issueSubHasAd no_ad→issueSubNoAd'.split(' ')
+      .find(s => s.startsWith(t === 'all' ? 'all' : t + '→'));
+    const elId = t === 'all' ? 'issueSubAll' : t === 'has_ad' ? 'issueSubHasAd' : 'issueSubNoAd';
+    document.getElementById(elId)?.classList.toggle('active', t === which);
+  });
+  renderIssueTable();
+}
+
 // ── Issue table ────────────────────────────────────────────────────────────
 function renderIssueTable(){
-  const filtered = sortData(issueData.filter(filterRec), sortIssue);
-  document.getElementById('cntIssue').textContent = filtered.length;
+  // Needs Work sub-tab filter: only applies to pct===0 rows
+  // Partial rows (pct>0) always show in 'all'; excluded from has_ad/no_ad sub-tabs
+  const base = issueData.filter(filterRec);
+  let filtered;
+  if(issueSubTab === 'has_ad'){
+    filtered = base.filter(a => a.pct === 0 && (a.all_ad_groups||'').trim() !== '');
+  } else if(issueSubTab === 'no_ad'){
+    filtered = base.filter(a => a.pct === 0 && !(a.all_ad_groups||'').trim());
+  } else {
+    filtered = base;
+  }
+  filtered = sortData(filtered, sortIssue);
 
+  // Update sub-tab counts (based on unfiltered issueData, not search)
+  const needsWork = issueData.filter(a => a.pct === 0);
+  document.getElementById('issueSubAllCnt').textContent   = issueData.length;
+  document.getElementById('issueSubHasAdCnt').textContent = needsWork.filter(a => (a.all_ad_groups||'').trim() !== '').length;
+  document.getElementById('issueSubNoAdCnt').textContent  = needsWork.filter(a => !(a.all_ad_groups||'').trim()).length;
+
+  document.getElementById('cntIssue').textContent = filtered.length;
   const tbody = document.getElementById('bodyIssue');
   if(!filtered.length){
     tbody.innerHTML='';
