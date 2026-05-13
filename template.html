@@ -404,6 +404,7 @@ tr.collected-row td{background:#f0fdf4;opacity:.7}
       <button class="pg-btn active" id="fAdAll"   onclick="setNeedsAdFilter('all')"       style="font-size:11px">All <span id="fAdAllCnt"  style="opacity:.7"></span></button>
       <button class="pg-btn"        id="fAdKitt"  onclick="setNeedsAdFilter('kitt')"      style="font-size:11px">Kitt <span id="fAdKittCnt" style="opacity:.7"></span></button>
       <button class="pg-btn"        id="fAdGcp"   onclick="setNeedsAdFilter('gcp')"       style="font-size:11px">GCP Groups <span id="fAdGcpCnt"  style="opacity:.7"></span></button>
+      <button class="pg-btn"        id="fAdAz"    onclick="setNeedsAdFilter('az')"        style="font-size:11px">Azure <span id="fAdAzCnt"   style="opacity:.7"></span></button>
     </div>
     <div class="tbl-wrap">
       <table id="tblUNeeds">
@@ -1161,14 +1162,16 @@ function renderUniverse(){
   document.getElementById('uCntCan').textContent   = univCan.length.toLocaleString();
   document.getElementById('uCntNo').textContent    = univNo.length.toLocaleString();
   // Populate AD source filter counts
-  const srcs = {all: univNeeds.length, kitt:0, gcp:0};
+  const srcs = {all: univNeeds.length, kitt:0, gcp:0, az:0};
   univNeeds.forEach(r => {
     if(hasAdSource(r,'kitt')) srcs.kitt++;
     if(hasAdSource(r,'gcp'))  srcs.gcp++;
+    if(hasAdSource(r,'az'))   srcs.az++;
   });
   document.getElementById('fAdAllCnt').textContent  = `(${srcs.all})`;
   document.getElementById('fAdKittCnt').textContent = `(${srcs.kitt})`;
   document.getElementById('fAdGcpCnt').textContent  = `(${srcs.gcp})`;
+  document.getElementById('fAdAzCnt').textContent   = `(${srcs.az})`;
   scheduleRenderUCurrent();
 }
 
@@ -1187,7 +1190,7 @@ function hasAdSource(rec, src){
   const unmatched = (rec.unmatched_groups||rec.all_ad_groups||'').toLowerCase();
   if(!unmatched) return false;
   // Map source key to the raw field name stored by Python
-  const fieldMap = {kitt:'kitt_group', gcp:['gcp_group','gcpp_group']};
+  const fieldMap = {kitt:'kitt_group', gcp:['gcp_group','gcpp_group'], az:'az_group'};
   const fields = fieldMap[src];
   if(!fields) return true;
   const fieldList = Array.isArray(fields) ? fields : [fields];
@@ -1202,7 +1205,7 @@ function hasAdSource(rec, src){
 function setNeedsAdFilter(src){
   needsAdFilter = src;
   // Update button styles
-  ['all','kitt','gcp'].forEach(k => {
+  ['all','kitt','gcp','az'].forEach(k => {
     const btn = document.getElementById('fAd'+k.charAt(0).toUpperCase()+k.slice(1));
     if(btn) btn.classList.toggle('active', k===src);
   });

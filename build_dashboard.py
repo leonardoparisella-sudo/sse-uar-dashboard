@@ -59,7 +59,7 @@ AD_GROUP_COLS = [
 
 # Columns for the APM Universe tab (uar_apm_enriched)
 BQ_APM_ENRICHED = f"`{PROJECT}.sse_findings_enriched_data.uar_apm_enriched`"
-APM_ENRICHED_AD_COLS = ["Kitt_AD_Group", "GCP_Owner_Groups", "GCP_Prod_Owner_Groups"]
+APM_ENRICHED_AD_COLS = ["Kitt_AD_Group", "GCP_Owner_Groups", "GCP_Prod_Owner_Groups", "AZ_AD_Groups"]
 
 HERE = Path(__file__).parent
 OUTPUT = HERE / "sse_uar_dashboard.html"
@@ -843,6 +843,7 @@ def load_apm_universe(
       Kitt_AD_Group,
       GCP_Owner_Groups,
       GCP_Prod_Owner_Groups,
+      AZ_AD_Groups,
       APM_Status
     FROM {BQ_APM_ENRICHED}
     WHERE APMid IS NOT NULL
@@ -854,7 +855,7 @@ def load_apm_universe(
     df["APMid"] = df["APMid"].fillna("").astype(str).str.strip()
     df = df[df["APMid"] != ""]
 
-    # Build AD groups per APM (only 3 columns in this table)
+    # Build AD groups per APM (Kitt, GCP Owner, GCP Prod, Azure)
     print("Extracting AD groups from uar_apm_enriched...")
     apm_groups: dict[str, set[str]] = {}
     for _, row in df.iterrows():
@@ -939,6 +940,7 @@ def load_apm_universe(
             "kitt_group": _pipe_groups("Kitt_AD_Group"),
             "gcp_group":  _pipe_groups("GCP_Owner_Groups"),
             "gcpp_group": _pipe_groups("GCP_Prod_Owner_Groups"),
+            "az_group":   _pipe_groups("AZ_AD_Groups"),
         })
 
     # Stats
