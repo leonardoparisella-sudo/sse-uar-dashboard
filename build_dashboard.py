@@ -59,6 +59,7 @@ AD_GROUP_COLS = [
 
 # Columns for the APM Universe tab (uar_apm_enriched)
 BQ_APM_ENRICHED = f"`{PROJECT}.sse_findings_enriched_data.uar_apm_enriched`"
+BQ_GALAXY       = f"`{PROJECT}.sse_findings_enriched_data.uar_galaxy_enriched`"
 APM_ENRICHED_AD_COLS = ["Kitt_AD_Group", "GCP_Owner_Groups", "GCP_Prod_Owner_Groups", "AZ_AD_Groups"]
 
 HERE = Path(__file__).parent
@@ -837,23 +838,27 @@ def load_apm_universe(
     print("Loading APM Universe from BigQuery (uar_apm_enriched)...")
     sql = f"""
     SELECT
-      APMid,
-      App_Name,
-      Business_Unit,
-      Data_Classification,
-      Flagged_PCI,
-      Flagged_SOX,
-      IT_App_Owner_Email,
-      Business_Owner_Email,
-      IT_App_Owner,
-      Business_Owner,
-      Kitt_AD_Group,
-      GCP_Owner_Groups,
-      GCP_Prod_Owner_Groups,
-      AZ_AD_Groups,
-      APM_Status
-    FROM {BQ_APM_ENRICHED}
-    WHERE APMid IS NOT NULL
+      a.APMid,
+      a.App_Name,
+      a.Business_Unit,
+      a.Data_Classification,
+      a.Flagged_PCI,
+      a.Flagged_SOX,
+      a.IT_App_Owner_Email,
+      a.Business_Owner_Email,
+      a.IT_App_Owner,
+      a.Business_Owner,
+      a.Kitt_AD_Group,
+      a.GCP_Owner_Groups,
+      a.GCP_Prod_Owner_Groups,
+      a.AZ_AD_Groups,
+      a.APM_Status,
+      -- Azure pending enrichment signal from Galaxy
+      CASE WHEN g.Galaxy_AZ_Sub_Names IS NOT NULL AND g.Galaxy_AZ_Sub_Names != ''
+           THEN TRUE ELSE FALSE END AS azure_pending
+    FROM {BQ_APM_ENRICHED} a
+    LEFT JOIN {BQ_GALAXY} g ON a.APMid = g.APMid
+    WHERE a.APMid IS NOT NULL
     """
     df = _query(sql)
     print(f"   Loaded {len(df):,} APMs from uar_apm_enriched")
@@ -948,6 +953,7 @@ def load_apm_universe(
             "gcp_group":  _pipe_groups("GCP_Owner_Groups"),
             "gcpp_group": _pipe_groups("GCP_Prod_Owner_Groups"),
             "az_group":   _pipe_groups("AZ_AD_Groups"),
+            "azure_pending": bool(row.get("azure_pending", False)),
         })
 
     # Stats

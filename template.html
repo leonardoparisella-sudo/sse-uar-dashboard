@@ -584,6 +584,7 @@ tr.collected-row td{background:#f0fdf4;opacity:.7}
     </button>
     <button class="u-subtab-btn" id="uTabNo" onclick="setUSubTab('no')">
       ⚪ No AD Groups <span id="uCntNo" style="background:#f3f4f6;color:#6b7280;padding:1px 7px;border-radius:8px;font-size:10px;margin-left:4px">0</span>
+      <span id="uCntNoAzPending" style="background:#ede9fe;color:#6d28d9;padding:1px 7px;border-radius:8px;font-size:10px;margin-left:3px;display:none" title="Awaiting Azure AD group enrichment">🔷 0 Azure pending</span>
     </button>
   </div>
 
@@ -653,6 +654,7 @@ tr.collected-row td{background:#f0fdf4;opacity:.7}
           <th>Owner Email</th>
           <th>Sensitivity</th>
           <th>PCI/SOX</th>
+          <th title="🔷 Azure Pending = Azure subscriptions found in Galaxy, AD groups awaiting enrichment | ⚪ None = no AD groups in any source">AD Group Status</th>
           <th>Existing Finding</th>
         </tr></thead>
         <tbody id="bodyUNo"></tbody>
@@ -1041,8 +1043,20 @@ function renderIssueTable(){
 }
 
 function makeIssueRow(rec){
-  const adGroups = rec.not_in_uar||rec.all_ad_groups||'';
   const lr = rec.llm_last_reach_out||'—';
+  // Partial APMs (pct > 0): show green chips for groups in MAR, red for groups not in MAR
+  // Full-issue APMs (pct === 0): all groups shown red
+  let adGroupsHtml;
+  if(rec.pct > 0 && rec.in_uar){
+    const inMar  = (rec.in_uar||'').split('|').filter(Boolean);
+    const notMar = (rec.not_in_uar||rec.all_ad_groups||'').split('|').filter(Boolean);
+    adGroupsHtml = (inMar.map(g=>`<span class="chip chip-green" title="In MAR">${esc(g)}</span>`).join('')
+                  + notMar.map(g=>`<span class="chip chip-red" title="Not in MAR">${esc(g)}</span>`).join(''))
+                  || '<span class="badge b-gray">None found</span>';
+  } else {
+    const adGroups = rec.not_in_uar||rec.all_ad_groups||'';
+    adGroupsHtml = adGroups ? adChips(adGroups,'red') : '<span class="badge b-gray">None found</span>';
+  }
   const lrBadge = lr==='Customer'?'<span class="badge b-purple">👤 Customer</span>':
                   lr==='SSE'?'<span class="badge b-blue">🔒 SSE</span>':
                   `<span class="badge b-gray">${esc(lr)}</span>`;
@@ -1053,7 +1067,7 @@ function makeIssueRow(rec){
     <td><div class="col-app">${esc(rec.app_name||rec.title)}</div></td>
     <td>${ownerCell(rec)}</td>
     <td>${esc(rec.vbu||'—')}</td>
-    <td class="col-adgroups">${adGroups?adChips(adGroups,'red'):'<span class="badge b-gray">None found</span>'}</td>
+    <td class="col-adgroups">${adGroupsHtml}</td>
     <td>${uarBadge(rec.uar_status)}</td>
     <td>${slaBadge(rec.llm_sla)}</td>
     <td>${sentimentBadge(rec.llm_sentiment)}</td>
@@ -1389,6 +1403,15 @@ function renderUniverse(){
   document.getElementById('uCntNeeds').textContent = univNeeds.length.toLocaleString();
   document.getElementById('uCntCan').textContent   = univCan.length.toLocaleString();
   document.getElementById('uCntNo').textContent    = univNo.length.toLocaleString();
+  // Azure pending split in No AD Groups tab
+  const azPendingCount = univNo.filter(r => r.azure_pending).length;
+  const azEl = document.getElementById('uCntNoAzPending');
+  if(azPendingCount > 0){
+    azEl.textContent = `🔷 ${azPendingCount} Azure pending`;
+    azEl.style.display = '';
+  } else {
+    azEl.style.display = 'none';
+  }
   // Populate AD source filter counts
   const srcs = {all: univNeeds.length, kitt:0, gcp:0, az:0};
   univNeeds.forEach(r => {
@@ -1579,6 +1602,9 @@ function makeUCanRow(rec){
   </tr>`;
 }
 function makeUNoRow(rec){
+  const azBadge = rec.azure_pending
+    ? `<span class="badge" style="background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd" title="Azure subscriptions found in Galaxy — AD groups pending enrichment">🔷 Azure Pending</span>`
+    : `<span class="badge b-gray" title="No AD groups found in any source">⚪ None</span>`;
   return `<tr>
     <td>${univCheckbox(rec.apm)}</td>
     <td><span class="col-apm">${esc(rec.apm)}</span></td>
@@ -1587,6 +1613,7 @@ function makeUNoRow(rec){
     <td>${univOwnerCell(rec)}</td>
     <td>${sensitivityBadge(rec.sens_level)}</td>
     <td>${pciSoxBadge(rec)}</td>
+    <td>${azBadge}</td>
     <td>${univExistingBadge(rec)}</td>
   </tr>`;
 }
