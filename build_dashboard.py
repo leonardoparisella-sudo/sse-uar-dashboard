@@ -355,14 +355,21 @@ def load_findings() -> pd.DataFrame:
       u.kitt_sibling_ad_groups,
       u.desc_named_groups,
       v.title,
+      v.issue_sub_type,
+      v.norm_status,
       v.due_date,
       v.due_status,
       v.remediation_owner,
       v.remediation_owner_email
     FROM {BQ_FINDINGS} u
-    LEFT JOIN {BQ_UNIFIED} v
+    JOIN {BQ_UNIFIED} v
       ON u.id = v.issue_id
     WHERE u.ssp_apm_id IS NOT NULL
+      AND v.norm_status = 'Active'
+      AND (
+        UPPER(v.issue_sub_type) LIKE '%UAR%'
+        OR UPPER(v.title)       LIKE '%UAR%'
+      )
     """
 
     df = _query(sql)
