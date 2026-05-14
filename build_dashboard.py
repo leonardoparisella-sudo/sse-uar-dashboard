@@ -323,20 +323,24 @@ def load_mar_quarters() -> tuple[dict, set, list[pd.DataFrame]]:
 
 
 def load_findings() -> pd.DataFrame:
-    """Load UAR findings from BQ, joined with owner/due info from vw_unified_findings.
+    """Load active UAR findings from unified_findings (authoritative source),
+    LEFT JOIN uar_findings_enriched for LLM/AD group enrichment fields.
 
-    Join key: u.id = v.issue_id  (879/879 rows, 798 with owner email verified)
+    Driving table: unified_findings (364 active UAR rows / 320 APMs)
+    Enrichment:    uar_findings_enriched via issue_id (260/364 matched)
     """
     print("Loading UAR findings from BigQuery...")
 
+    BQ_UF = f"`{PROJECT}.sse_data_lake.unified_findings`"
+
     sql = f"""
     SELECT
-      u.id                              AS issue_id,
-      u.ssp_apm_id                      AS apm_id,
+      v.issue_id                        AS issue_id,
+      v.ssp_apm_id                      AS apm_id,
       u.uid,
-      u.issue_status,
-      u.vbu,
-      u.ssp_application_name,
+      v.issue_status,
+      v.vbu,
+      v.apm_App_Name                    AS ssp_application_name,
       u.llm_sla,
       u.llm_sentiment_analysis,
       u.llm_summarized_comments,
@@ -362,14 +366,14 @@ def load_findings() -> pd.DataFrame:
       v.due_status,
       v.remediation_owner,
       v.remediation_owner_email
-    FROM {BQ_FINDINGS} u
-    JOIN {BQ_UNIFIED} v
-      ON u.id = v.issue_id
-    WHERE u.ssp_apm_id IS NOT NULL
+    FROM {BQ_UF} v
+    LEFT JOIN {BQ_FINDINGS} u
+      ON v.issue_id = u.id
+    WHERE v.ssp_apm_id IS NOT NULL
       AND v.norm_status = 'Active'
       AND (
-        UPPER(v.issue_sub_type) LIKE '%UAR%'
-        OR UPPER(v.title)       LIKE '%UAR%'
+        UPPER(COALESCE(v.issue_sub_type, '')) LIKE '%UAR%'
+        OR UPPER(COALESCE(v.title, ''))       LIKE '%UAR%'
       )
     """
 
