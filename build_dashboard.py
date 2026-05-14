@@ -347,7 +347,7 @@ def load_findings() -> pd.DataFrame:
       u.llm_last_reach_out,
       u.llm_ownership_change_requested,
       u.llm_customer_question_requested,
-      u.llm_sse_reviewer,
+      COALESCE(v.task_reviewer, u.llm_sse_reviewer) AS llm_sse_reviewer,
       u.llm_auditboard_link,
       u.snow_data_classification,
       u.apm_sox_flag,
@@ -625,7 +625,11 @@ def build_apm_list(
         # Title/VBU: use first row (consistent since all rows share the same APM)
         first_row = rows[0]
 
+        # is_enriched: True if any row for this APM matched uar_findings_enriched (uid populated)
+        is_enriched = any(_safe_str(r.get("uid", "")) not in ("", "nan", "None") for r in rows)
+
         records[apm] = {
+            "is_enriched": is_enriched,
             "apm": apm,
             "title": _first_non_empty("title")[:50],
             "owner": parse_owner(_first_non_empty("remediation_owner")),
@@ -715,6 +719,7 @@ def build_apm_list(
             "mar_user_count": data["mar_user_count"],
             "findings": data["findings"],
             "csv_b64": csv_b64,
+            "is_enriched": data["is_enriched"],
         })
 
     return result

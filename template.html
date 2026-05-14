@@ -1107,7 +1107,7 @@ function makeIssueRow(rec){
     <td>${ownerCell(rec)}</td>
     <td>${esc(rec.vbu||'—')}</td>
     <td class="col-adgroups">${adGroupsHtml}</td>
-    <td>${uarBadge(rec.uar_status)}</td>
+    <td>${uarBadge(rec.uar_status)}${rec.is_enriched===false?'<span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;margin-left:4px" title="No data in uar_findings_enriched — LLM fields and AD groups unavailable">⚠ Not in Enrichment</span>':''}</td>
     <td>${slaBadge(rec.llm_sla)}</td>
     <td>${sentimentBadge(rec.llm_sentiment)}</td>
     <td>${pciSoxBadge(rec)}</td>
