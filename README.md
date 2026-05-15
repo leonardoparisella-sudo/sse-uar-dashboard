@@ -4,9 +4,9 @@
 
 ## 🚀 Open the Dashboard
 
-**→ [Open Dashboard (GHE Raw)](https://gecgithub01.walmart.com/lparise/sse-uar-dashboard/raw/master/sse_uar_dashboard.html)**
+**→ [Open Dashboard](https://gecgithub01.walmart.com/pages/lparise/sse-uar-dashboard/)**
 
-> Download the file and open in any browser. No installation needed — fully self-contained HTML.
+> Works in any browser on the Walmart network. No installation needed — just click and open.
 
 ---
 
@@ -97,7 +97,7 @@ Builds fresh from BigQuery (~2-3 min), commits, and pushes to both repos automat
 
 | | URL |
 |--|--|
-| **Dashboard (download & open)** | https://gecgithub01.walmart.com/lparise/sse-uar-dashboard/raw/master/sse_uar_dashboard.html |
+| **Dashboard (live)** | https://gecgithub01.walmart.com/pages/lparise/sse-uar-dashboard/ |
 | **Enterprise repo (primary)** | https://gecgithub01.walmart.com/lparise/sse-uar-dashboard |
 
 *SSE Global Compliance · `build_dashboard.py` · BigQuery `infosec-compliance-auditboard`*
