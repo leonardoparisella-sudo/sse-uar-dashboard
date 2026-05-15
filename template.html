@@ -285,6 +285,9 @@ tr.collected-row td{background:#f0fdf4;opacity:.7}
   <button class="tab-btn" id="tabUniverse" onclick="setTab('universe')" title="All 7,948 APMs — find which ones need new UAR findings">
     🌐 APM Universe <span id="cntUniverse" style="background:#ede9fe;color:#6b21a8;padding:1px 7px;border-radius:8px;font-size:11px;margin-left:4px">0</span>
   </button>
+  <button class="tab-btn" id="tabTrends" onclick="setTab('trends')" title="Daily count snapshots per rebuild">
+    📈 Trends
+  </button>
 </div>
 
 <!-- ── CAN CLOSE TAB ────────────────────────────────────────────────── -->
@@ -735,6 +738,41 @@ tr.collected-row td{background:#f0fdf4;opacity:.7}
   </div>
 </div>
 
+<!-- ── TRENDS TAB ──────────────────────────────────────────────────────── -->
+<div class="tab-pane" id="paneTrends">
+  <div style="padding:20px 24px 32px;max-width:1000px;margin:0 auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-size:16px;font-weight:800;color:#111827">📈 Daily Count Trends</div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px">Snapshot captured on every rebuild · newest first</div>
+      </div>
+      <div id="trendsSummary" style="font-size:12px;color:#6b7280"></div>
+    </div>
+
+    <div style="overflow-x:auto;border-radius:10px;border:1px solid #e5e7eb">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:#f8fafc">
+            <th style="padding:10px 14px;text-align:left;font-weight:700;border-bottom:2px solid #e5e7eb;color:#374151;white-space:nowrap">Date</th>
+            <th style="padding:10px 14px;text-align:center;font-weight:700;border-bottom:2px solid #e5e7eb;color:#374151;white-space:nowrap">Total APMs</th>
+            <th style="padding:10px 14px;text-align:center;font-weight:700;border-bottom:2px solid #e5e7eb;color:#166534;white-space:nowrap">✅ Can Close</th>
+            <th style="padding:10px 14px;text-align:center;font-weight:700;border-bottom:2px solid #e5e7eb;color:#92400e;white-space:nowrap">🟡 Partial</th>
+            <th style="padding:10px 14px;text-align:center;font-weight:700;border-bottom:2px solid #e5e7eb;color:#dc2626;white-space:nowrap">❌ Needs Work</th>
+            <th style="padding:10px 14px;text-align:center;font-weight:700;border-bottom:2px solid #e5e7eb;color:#7c3aed;white-space:nowrap">⏰ Past Due</th>
+          </tr>
+        </thead>
+        <tbody id="trendsBody">
+          <tr><td colspan="6" style="text-align:center;padding:40px;color:#9ca3af">No history data yet — rebuild to capture the first snapshot.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:12px;font-size:10px;color:#9ca3af">
+      ▲ green = increase from previous day &nbsp;·&nbsp; ▼ red = decrease &nbsp;·&nbsp; — = no change / first entry
+    </div>
+  </div>
+</div>
+
 <!-- ── Toast ─────────────────────────────────────────────────────────── -->
 <div class="toast" id="toast"></div>
 
@@ -744,6 +782,7 @@ tr.collected-row td{background:#f0fdf4;opacity:.7}
 <script>
 const apmData = __APM_DATA__;
 const univData = __APM_UNIVERSE_DATA__;
+const historyData = __HISTORY_DATA__;
 const STORAGE_KEY = 'sse_uar_collected';
 const CURRENT_QUARTER = '__CURRENT_QUARTER__';
 
@@ -1122,13 +1161,14 @@ function makeIssueRow(rec){
 // ── Tab switching ──────────────────────────────────────────────────────────
 function setTab(which){
   activeTab = which;
-  ['close','issue','summary','universe'].forEach(t => {
+  ['close','issue','summary','universe','trends'].forEach(t => {
     document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1))?.classList.toggle('active', t===which);
     document.getElementById('pane'+t.charAt(0).toUpperCase()+t.slice(1))?.classList.toggle('active', t===which);
   });
   document.getElementById('quarterGroup').classList.toggle('hidden', which!=='close');
   if(which==='universe') renderUniverse();
   else if(which==='summary') renderSummary();
+  else if(which==='trends') renderTrends();
   else applyFilters();
 }
 
@@ -1818,6 +1858,68 @@ applyFilters = function(){
   setInterval(checkForUpdate, CHECK_INTERVAL);
   updateBadge('auto-refresh on');
 })();
+
+// ── Trends tab renderer ────────────────────────────────────────────────────
+function renderTrends(){
+  const body = document.getElementById('trendsBody');
+  if(!body) return;
+
+  const rows = [...historyData].sort((a,b) => b.date < a.date ? -1 : b.date > a.date ? 1 : 0);
+
+  if(!rows.length){
+    body.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:#9ca3af">No history data yet — rebuild to capture the first snapshot.</td></tr>';
+    document.getElementById('trendsSummary').textContent = '';
+    return;
+  }
+
+  const latest = rows[0];
+  const prev   = rows[1];
+
+  // Summary line at top
+  const summEl = document.getElementById('trendsSummary');
+  if(summEl && prev){
+    const d = latest.total - prev.total;
+    summEl.innerHTML = `Latest build: <strong>${latest.date}</strong> &nbsp;·&nbsp; Total APMs: <strong>${latest.total}</strong> `
+      + `<span style="color:${d<0?'#dc2626':d>0?'#16a34a':'#6b7280'}">(${d>0?'+':''}${d} vs ${prev.date})</span>`;
+  } else if(summEl) {
+    summEl.innerHTML = `Latest build: <strong>${latest.date}</strong> &nbsp;·&nbsp; Total APMs: <strong>${latest.total}</strong> <span style="color:#9ca3af">(first snapshot)</span>`;
+  }
+
+  function delta(curr, prevRow, field){
+    if(!prevRow) return '<span style="color:#9ca3af">—</span>';
+    const d = curr[field] - prevRow[field];
+    if(d === 0) return '<span style="color:#9ca3af">—</span>';
+    const color = d > 0 ? '#16a34a' : '#dc2626';
+    const arrow = d > 0 ? '▲' : '▼';
+    return `<span style="color:${color};font-size:10px">${arrow}${Math.abs(d)}</span>`;
+  }
+
+  body.innerHTML = rows.map((row, i) => {
+    const prevRow = rows[i+1] || null;
+    const isToday = row.date === rows[0].date;
+    const bg = isToday ? '#f0fdf4' : (i%2===0?'white':'#fafafa');
+    return `<tr style="background:${bg}">
+      <td style="padding:9px 14px;border-bottom:1px solid #f3f4f6;font-weight:${isToday?'700':'400'};white-space:nowrap">
+        ${row.date}${isToday?' <span style="font-size:9px;background:#dcfce7;color:#166534;padding:1px 6px;border-radius:8px;vertical-align:middle">latest</span>':''}
+      </td>
+      <td style="padding:9px 14px;border-bottom:1px solid #f3f4f6;text-align:center;font-weight:700">
+        ${row.total} ${delta(row,prevRow,'total')}
+      </td>
+      <td style="padding:9px 14px;border-bottom:1px solid #f3f4f6;text-align:center;color:#166534;font-weight:600">
+        ${row.can_close} ${delta(row,prevRow,'can_close')}
+      </td>
+      <td style="padding:9px 14px;border-bottom:1px solid #f3f4f6;text-align:center;color:#92400e;font-weight:600">
+        ${row.partial} ${delta(row,prevRow,'partial')}
+      </td>
+      <td style="padding:9px 14px;border-bottom:1px solid #f3f4f6;text-align:center;color:#dc2626;font-weight:600">
+        ${row.needs_work} ${delta(row,prevRow,'needs_work')}
+      </td>
+      <td style="padding:9px 14px;border-bottom:1px solid #f3f4f6;text-align:center;color:#7c3aed;font-weight:600">
+        ${row.past_due} ${delta(row,prevRow,'past_due')}
+      </td>
+    </tr>`;
+  }).join('');
+}
 </script>
 </body>
 </html>

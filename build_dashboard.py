@@ -21,6 +21,7 @@ Data sources:
 from __future__ import annotations
 
 import base64
+import datetime
 import json
 import re
 from pathlib import Path
@@ -65,6 +66,7 @@ APM_ENRICHED_AD_COLS = ["Kitt_AD_Group", "GCP_Owner_Groups", "GCP_Prod_Owner_Gro
 HERE = Path(__file__).parent
 OUTPUT = HERE / "sse_uar_dashboard.html"
 TEMPLATE_FILE = HERE / "template.html"
+HISTORY_FILE  = HERE / "dashboard_history.json"
 AB_BASE = "https://walmart-infosec.auditboardapp.com"
 
 
@@ -1064,11 +1066,40 @@ def main() -> None:
     print(f"  Past Due:          {past_due}")
     print(f"  Quarter:           {current_quarter}")
 
-    # 10. Render HTML
+    # 10. Update daily history snapshot
+    today_str = datetime.date.today().isoformat()
+    today_snapshot = {
+        "date":       today_str,
+        "total":      len(apm_list),
+        "can_close":  can_close,
+        "partial":    partial,
+        "needs_work": needs_work,
+        "past_due":   past_due,
+    }
+
+    try:
+        history: list[dict] = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+        if not isinstance(history, list):
+            history = []
+    except (FileNotFoundError, json.JSONDecodeError, ValueError):
+        history = []
+
+    # Overwrite same-day entry; append new entry otherwise
+    existing_idx = next((i for i, e in enumerate(history) if e.get("date") == today_str), None)
+    if existing_idx is not None:
+        history[existing_idx] = today_snapshot
+    else:
+        history.append(today_snapshot)
+
+    HISTORY_FILE.write_text(json.dumps(history, indent=2), encoding="utf-8")
+    print(f"History snapshot saved ({len(history)} entries) → {HISTORY_FILE.name}")
+
+    # 11. Render HTML
     template = TEMPLATE_FILE.read_text(encoding="utf-8")
     html = template.replace("__APM_DATA__", json.dumps(apm_list, default=str))
     html = html.replace("__APM_UNIVERSE_DATA__", json.dumps(apm_universe, default=str))
     html = html.replace("__CURRENT_QUARTER__", current_quarter)
+    html = html.replace("__HISTORY_DATA__", json.dumps(history, default=str))
 
     OUTPUT.write_text(html, encoding="utf-8")
     size_mb = OUTPUT.stat().st_size / 1_048_576
