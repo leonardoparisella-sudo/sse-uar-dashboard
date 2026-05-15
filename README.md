@@ -4,7 +4,7 @@
 
 ## 🚀 Open the Dashboard
 
-**→ [Open Dashboard](https://gecgithub01.walmart.com/pages/lparise/sse-uar-dashboard/)**
+**→ [Open Dashboard](https://gecgithub01.walmart.com/pages/lparise/sse-uar-dashboard/sse_uar_dashboard.html)**
 
 > Works in any browser on the Walmart network. No installation needed — just click and open.
 
@@ -40,11 +40,13 @@ Filter the "Generate Finding" sub-tab by AD group source:
 
 | Source | Type | What It Provides |
 |--------|------|-----------------|
-| `sse_findings_enriched_data.uar_findings_enriched` | BigQuery | UAR findings + AD groups + LLM fields |
-| `sse_data_lake.vw_unified_findings` | BigQuery | Title, due date, owner, email |
+| `sse_data_lake.unified_findings` | BigQuery | **Authoritative** — 364 active UAR findings / 293 APMs; title, due date, owner, email, reviewer |
+| `sse_findings_enriched_data.uar_findings_enriched` | BigQuery (LEFT JOIN) | AD groups + LLM fields (260/364 matched) |
 | `snow_apm_data.sse_apm_data_prod` | BigQuery | APM sensitivity, PCI/SOX flags |
 | `sse_findings_enriched_data.uar_apm_enriched` | BigQuery | Full 7,952 APM universe |
+| `sse_findings_enriched_data.uar_galaxy_enriched` | BigQuery | Azure subscription signal (azure_pending flag) |
 | MAR CSV files | Local SharePoint sync | Quarterly entitlement evidence (~752 MB) |
+| `dashboard_history.json` | Repo file | Daily snapshot history for 📈 Trends tab |
 
 **BigQuery Project:** `infosec-compliance-auditboard`  
 **Auth:** Google Application Default Credentials (ADC)
@@ -97,7 +99,7 @@ Builds fresh from BigQuery (~2-3 min), commits, and pushes to both repos automat
 
 | | URL |
 |--|--|
-| **Dashboard (live)** | https://gecgithub01.walmart.com/pages/lparise/sse-uar-dashboard/ |
+| **Dashboard (live)** | https://gecgithub01.walmart.com/pages/lparise/sse-uar-dashboard/sse_uar_dashboard.html |
 | **Enterprise repo (primary)** | https://gecgithub01.walmart.com/lparise/sse-uar-dashboard |
 
 *SSE Global Compliance · `build_dashboard.py` · BigQuery `infosec-compliance-auditboard`*
