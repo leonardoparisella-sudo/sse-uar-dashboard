@@ -1,12 +1,12 @@
-# 🔐 SSE UAR Evidence Collection Dashboard
+# 🔐 SSE — APM-to-AD Group Intelligence Pipeline
 
 **Team:** SSE Global Compliance | **Quarter:** FY27 Q1
 
 ## 🚀 Open the Dashboard
 
-**→ [Open Dashboard](https://gecgithub01.walmart.com/pages/lparise/sse-uar-dashboard/)**
+**→ [Open Dashboard (GHE Raw)](https://gecgithub01.walmart.com/lparise/sse-uar-dashboard/raw/master/sse_uar_dashboard.html)**
 
-> Works in any browser on the Walmart network. No installation needed — just click and open.
+> Download the file and open in any browser. No installation needed — fully self-contained HTML.
 
 ---
 
@@ -20,6 +20,7 @@ Answers one question per app: *"Do we have MAR evidence to close this UAR findin
 | ✅ **Can Close** | APMs with AD groups verified in MAR | Download CSV → upload to AuditBoard → check Done |
 | ❌ **Issue / Needs Work** | APMs with no MAR match | Follow up with owner or issue UAR finding |
 | 🌐 **APM Universe** | All 7,952 APMs — find which need new findings | Generate Finding sub-tab: select APMs → Bulk Email owners |
+| 📈 **Trends** | Daily count snapshots per rebuild | Track Total, Can Close, Partial, Needs Work, Past Due over time |
 
 ### AD Group Source Filter (APM Universe tab)
 
@@ -96,8 +97,7 @@ Builds fresh from BigQuery (~2-3 min), commits, and pushes to both repos automat
 
 | | URL |
 |--|--|
-| **Dashboard (live)** | https://gecgithub01.walmart.com/pages/lparise/sse-uar-dashboard/ |
+| **Dashboard (download & open)** | https://gecgithub01.walmart.com/lparise/sse-uar-dashboard/raw/master/sse_uar_dashboard.html |
 | **Enterprise repo (primary)** | https://gecgithub01.walmart.com/lparise/sse-uar-dashboard |
-| **GitHub mirror + Pages** | https://leonardoparisella-sudo.github.io/sse-uar-dashboard/ |
 
 *SSE Global Compliance · `build_dashboard.py` · BigQuery `infosec-compliance-auditboard`*
