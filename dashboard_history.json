@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "date": "2026-05-14",
+    "total": 320,
+    "can_close": 58,
+    "partial": 30,
+    "needs_work": 232,
+    "past_due": 211
+  },
+  {
+    "date": "2026-05-15",
+    "total": 293,
+    "can_close": 47,
+    "partial": 28,
+    "needs_work": 218,
+    "past_due": 183
+  }
+]
