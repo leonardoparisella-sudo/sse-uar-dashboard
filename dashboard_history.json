@@ -14,5 +14,29 @@
     "partial": 28,
     "needs_work": 218,
     "past_due": 183
+  },
+  {
+    "date": "2026-05-18",
+    "total": 293,
+    "can_close": 47,
+    "partial": 28,
+    "needs_work": 218,
+    "past_due": 183
+  },
+  {
+    "date": "2026-05-19",
+    "total": 332,
+    "can_close": 50,
+    "partial": 49,
+    "needs_work": 233,
+    "past_due": 222
+  },
+  {
+    "date": "2026-05-20",
+    "total": 332,
+    "can_close": 50,
+    "partial": 49,
+    "needs_work": 233,
+    "past_due": 222
   }
 ]

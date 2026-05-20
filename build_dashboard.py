@@ -173,6 +173,14 @@ def get_quarter_for_group(group: str, entitlement_quarters: dict, default: str) 
     return entitlement_quarters.get(group.strip().lower(), default)
 
 
+def _normalise_apm(raw: str) -> str:
+    """Normalise legacy numeric APM IDs: '8623' → 'APM0008623'. Leaves 'APM0008623' unchanged."""
+    s = str(raw).strip()
+    if s.isdigit():
+        return f"APM{int(s):07d}"
+    return s
+
+
 def _sens_level(dc: str) -> str:
     dc = (dc or "").lower().strip()
     if "highly_sensitive" in dc or "restricted_highly_sensitive" in dc:
@@ -333,7 +341,7 @@ def load_findings() -> pd.DataFrame:
     """
     print("Loading UAR findings from BigQuery...")
 
-    BQ_UF = f"`{PROJECT}.sse_data_lake.unified_findings`"
+    BQ_UF = f"`{PROJECT}.sse_data_lake.vw_unified_findings`"
 
     sql = f"""
     SELECT
@@ -373,10 +381,7 @@ def load_findings() -> pd.DataFrame:
       ON v.issue_id = u.id
     WHERE v.ssp_apm_id IS NOT NULL
       AND v.norm_status = 'Active'
-      AND (
-        UPPER(COALESCE(v.issue_sub_type, '')) LIKE '%UAR%'
-        OR UPPER(COALESCE(v.title, ''))       LIKE '%UAR%'
-      )
+      AND UPPER(COALESCE(v.title, '')) LIKE '%UAR%'
     """
 
     df = _query(sql)
@@ -456,6 +461,172 @@ def load_ad_groups_from_bq(df: pd.DataFrame) -> dict[str, set[str]]:
     has_groups = sum(1 for v in apm_all_groups.values() if v)
     print(f"   {has_groups} APMs have AD groups, {len(apm_all_groups) - has_groups} have none")
     return apm_all_groups
+
+
+def load_action_plan_ad_groups(issue_ids: list[int]) -> dict[str, set[str]]:
+    """Stage 1e — extract AD groups embedded in action plan remediation_action text.
+
+    Joins vw_master_action_plans on the issue_ids already loaded from findings.
+    Uses two extraction strategies:
+      1. Explicit 'AD Group(s): <name>' context
+      2. Known prefix tokens (gcp-, hw-, sams-, etc.)
+
+    Returns apm_id → set of extracted group names (lowercased, cleaned).
+    """
+    if not issue_ids:
+        return {}
+
+    print("Stage 1e — extracting AD groups from action plan text...")
+
+    ids_csv = ",".join(str(i) for i in issue_ids if i)
+    sql = f"""
+    SELECT
+      m.issue_id,
+      m.remediation_action,
+      v.ssp_apm_id
+    FROM `{PROJECT}.sse_data_lake.vw_master_action_plans` m
+    JOIN `{PROJECT}.sse_data_lake.vw_unified_findings` v
+      ON m.issue_id = v.issue_id
+    WHERE m.issue_id IN ({ids_csv})
+      AND m.remediation_action IS NOT NULL
+      AND v.ssp_apm_id IS NOT NULL
+    """
+    df_ap = _query(sql)
+    if df_ap.empty:
+        print("   No action plan rows found.")
+        return {}
+
+    # Tokens that look like group names but are English words / URL fragments
+    _DENY = {
+        "confluence", "jira", "sailpoint", "wmlink", "https", "servicedesk",
+        "portal", "saml", "sap-grc", "access-steward", "remediate", "remediation",
+        "implement", "approved", "solution", "following", "request", "setup",
+        "link", "form", "https-confluence", "display",
+    }
+    # Explicit 'AD Group(s):' pattern
+    _EXPLICIT = re.compile(
+        r"(?i)AD\s+[Gg]roup[s]?\s*[-:=\(]\s*([A-Za-z0-9_\-]+(?:[,\s]+[A-Za-z0-9_\-]+)*)"
+    )
+    # Known-prefix pattern
+    _PREFIX = re.compile(
+        r"(?i)((?:gcp-|hw-|sams-|wmt-|az-|intl-|cl-|mp3p-|carto_|affil-|creator-|"
+        r"glass-|mgql-|ccap-|gdi-|coremembership-|wmh-)[A-Za-z0-9_\-]{2,})"
+    )
+
+    result: dict[str, set[str]] = {}
+    for _, row in df_ap.iterrows():
+        apm = _safe_str(row.get("ssp_apm_id"))
+        if not apm:
+            continue
+        text = str(row.get("remediation_action") or "")
+        groups: set[str] = set()
+
+        for m in _EXPLICIT.finditer(text):
+            for part in re.split(r"[\s,]+", m.group(1)):
+                part = part.strip(" .,;)(").lower()
+                if len(part) >= 4 and part not in _DENY:
+                    groups.add(part)
+
+        for m in _PREFIX.finditer(text):
+            part = m.group(1).strip(" .,;)(").lower()
+            if len(part) >= 4 and part not in _DENY:
+                groups.add(part)
+
+        if groups:
+            result.setdefault(apm, set()).update(groups)
+
+    total_groups = sum(len(v) for v in result.values())
+    print(f"   Found {total_groups} AD groups across {len(result)} APMs from action plans")
+    for apm, grps in sorted(result.items()):
+        print(f"     {apm}: {', '.join(sorted(grps))}")
+    return result
+
+
+def load_issues_ad_groups(issue_ids: list[int]) -> dict[str, set[str]]:
+    """Stage 1f — extract AD groups from vw_master_issues description and issue_notes.
+
+    Joins on the issue_ids already loaded from findings.
+    Uses explicit 'AD Group(s):' context, quoted names, and known-prefix tokens.
+
+    Returns apm_id → set of extracted group names (lowercased, cleaned).
+    """
+    if not issue_ids:
+        return {}
+
+    print("Stage 1f — extracting AD groups from issues description/notes...")
+
+    ids_csv = ",".join(str(i) for i in issue_ids if i)
+    sql = f"""
+    SELECT
+      i.issue_id,
+      i.ssp_apm_id,
+      i.description,
+      i.issue_notes
+    FROM `{PROJECT}.sse_data_lake.vw_master_issues` i
+    WHERE i.issue_id IN ({ids_csv})
+      AND i.ssp_apm_id IS NOT NULL
+      AND (i.description IS NOT NULL OR i.issue_notes IS NOT NULL)
+    """
+    df_issues = _query(sql)
+    if df_issues.empty:
+        print("   No issue rows found.")
+        return {}
+
+    import html as _html
+
+    _DENY = {
+        "confluence", "jira", "sailpoint", "wmlink", "https", "servicedesk",
+        "portal", "saml", "sap-grc", "access-steward", "remediate", "remediation",
+        "implement", "approved", "solution", "following", "request", "setup",
+        "link", "form", "display", "list", "groups", "active", "directory",
+        "quarterly", "manager", "access", "review", "users", "privileged",
+        "control", "finding",
+    }
+    _EXPLICIT = re.compile(
+        r"(?i)(?:AD.{0,10}[Gg]roup[s]?\s*[:\-=\(]+\s*|[Gg]roup[s]?:\s*)"
+        r"([A-Za-z0-9_\-]+(?:[,\s]+[A-Za-z0-9_\-]+)*)"
+    )
+    _QUOTED = re.compile(r'["\']([A-Za-z][A-Za-z0-9_\-]{3,})["\']')
+    _PREFIX = re.compile(
+        r"(?i)((?:gcp-|hw-|sams-|wmt-|az-|intl-|cl-|sumo-|tops_|isd-|"
+        r"driverexperience|vendorbuddy|mt-|mercury-|samsclub-|cerebro-|"
+        r"lobo-|mx-|rx_|rovr|clubops|gec-)[A-Za-z0-9_\-]{2,})"
+    )
+
+    result: dict[str, set[str]] = {}
+    for _, row in df_issues.iterrows():
+        apm = _safe_str(row.get("ssp_apm_id"))
+        if not apm:
+            continue
+        raw = _html.unescape(
+            str(row.get("description") or "") + " " + str(row.get("issue_notes") or "")
+        )
+        groups: set[str] = set()
+
+        for m in _EXPLICIT.finditer(raw):
+            for part in re.split(r"[,\s]+", m.group(1)):
+                part = part.strip(" .,;)(").lower()
+                if len(part) >= 4 and part not in _DENY and ("-" in part or "_" in part):
+                    groups.add(part)
+
+        for m in _QUOTED.finditer(raw):
+            part = m.group(1).strip().lower()
+            if len(part) >= 4 and part not in _DENY and ("-" in part or "_" in part):
+                groups.add(part)
+
+        for m in _PREFIX.finditer(raw):
+            part = m.group(1).strip(" .,;)(").lower()
+            if len(part) >= 4 and part not in _DENY:
+                groups.add(part)
+
+        if groups:
+            result.setdefault(apm, set()).update(groups)
+
+    total_groups = sum(len(v) for v in result.values())
+    print(f"   Found {total_groups} AD groups across {len(result)} APMs from issues")
+    for apm, grps in sorted(result.items()):
+        print(f"     {apm}: {', '.join(sorted(grps))}")
+    return result
 
 
 def load_ab_links(df: pd.DataFrame) -> tuple[dict, dict]:
@@ -557,16 +728,20 @@ def build_apm_list(
     # owner/email, and all LLM fields from the most data-rich row.
     DUE_STATUS_RANK = {"Past due": 0, "Due soon": 1, "On track": 2, "": 3}
 
+    # Group by title (unique finding) instead of APM ID.
+    # AD group lookups still use apm_id from the first row in each group.
     apm_rows: dict[str, list] = {}
     for _, row in df.iterrows():
-        apm = str(row["apm_id"])
-        apm_rows.setdefault(apm, []).append(row)
+        key = str(row.get("title", "")).strip() or str(row["apm_id"])
+        apm_rows.setdefault(key, []).append(row)
 
     records: dict[str, dict] = {}
 
     for apm, rows in apm_rows.items():
-        all_groups = apm_all_groups.get(apm, set())
-        verified_info = apm_verified.get(apm)
+        # Use the apm_id from the first row for AD group / sensitivity lookups
+        apm_id_for_lookup = str(rows[0]["apm_id"])
+        all_groups = apm_all_groups.get(apm_id_for_lookup, set())
+        verified_info = apm_verified.get(apm_id_for_lookup)
 
         if verified_info:
             verified = set(verified_info["ad_groups"])
@@ -591,7 +766,7 @@ def build_apm_list(
         matched_quarters = [q for q in matched_quarters if q]
         quarter = max(matched_quarters) if matched_quarters else current_quarter
 
-        sens = apm_sensitivity.get(apm, _EMPTY_SENS)
+        sens = apm_sensitivity.get(apm_id_for_lookup, _EMPTY_SENS)
 
         # Fix #1: Select the best row for scalar fields.
         # due_status: worst-case (Past due > Due soon > On track)
@@ -632,8 +807,8 @@ def build_apm_list(
 
         records[apm] = {
             "is_enriched": is_enriched,
-            "apm": apm,
-            "title": _first_non_empty("title")[:50],
+            "apm": apm_id_for_lookup,
+            "title": apm[:50],  # apm key IS the title when grouped by title
             "owner": parse_owner(_first_non_empty("remediation_owner")),
             "email": _first_non_empty("remediation_owner_email"),
             "due_date": _first_non_empty("due_date"),
@@ -648,8 +823,8 @@ def build_apm_list(
             "pci": sens["pci"],
             "sox": sens["sox"],
             # AuditBoard
-            "auditboard_link": ab_links.get(apm, ""),
-            "ab_link_type": ab_types.get(apm, ""),
+            "auditboard_link": ab_links.get(apm_id_for_lookup, ""),
+            "ab_link_type": ab_types.get(apm_id_for_lookup, ""),
             # LLM
             "llm_sla": llm["sla"],
             "llm_sentiment": llm["sentiment"],
@@ -722,6 +897,10 @@ def build_apm_list(
             "findings": data["findings"],
             "csv_b64": csv_b64,
             "is_enriched": data["is_enriched"],
+            # Risk scoring fields — populated by Phase 1 scorer after build_apm_list()
+            "risk_score": 0,
+            "risk_tier":  "Unscored",
+            "risk_color": "#6b7280",
         })
 
     return result
@@ -834,6 +1013,7 @@ def load_apm_universe(
     token_index: dict[str, list[str]],
     mar_df: pd.DataFrame | None,
     existing_apm_ids: set[str],
+    extra_ad_groups: dict[str, set[str]] | None = None,
 ) -> list[dict]:
     """Load all 7948 APMs from uar_apm_enriched, run strict MAR matching,
     and categorize them for the APM Universe tab.
@@ -889,6 +1069,13 @@ def load_apm_universe(
             if val is not None and str(val).strip() not in ("", "nan", "None", "[]", "null"):
                 groups.update(extract_groups_from_value(val))
         apm_groups[apm] = groups
+
+    # Merge in groups extracted from action plans + issues (Stages 1e/1f)
+    if extra_ad_groups:
+        for apm, grps in extra_ad_groups.items():
+            apm_norm = _normalise_apm(apm)
+            apm_groups.setdefault(apm_norm, set()).update(grps)
+        print(f"   Merged extra AD groups from Stages 1e/1f into Universe")
 
     has_any = sum(1 for v in apm_groups.values() if v)
     print(f"   {has_any:,} APMs have AD groups, {len(apm_groups)-has_any:,} have none")
@@ -1013,6 +1200,23 @@ def main() -> None:
     # 4. Extract AD groups from findings df (no extra BQ query needed)
     apm_all_groups = load_ad_groups_from_bq(df)
 
+    # 4b. Stage 1e — supplement with AD groups extracted from action plan text
+    issue_ids = df["issue_id"].dropna().astype(int).tolist()
+    ap_groups = load_action_plan_ad_groups(issue_ids)
+    before_1e = sum(1 for v in apm_all_groups.values() if v)
+    for apm, grps in ap_groups.items():
+        apm_all_groups.setdefault(apm, set()).update(grps)
+    after_1e = sum(1 for v in apm_all_groups.values() if v)
+    print(f"   Stage 1e added groups to {after_1e - before_1e} previously empty APMs")
+
+    # 4c. Stage 1f — supplement with AD groups extracted from issues description/notes
+    issues_groups = load_issues_ad_groups(issue_ids)
+    before_1f = sum(1 for v in apm_all_groups.values() if v)
+    for apm, grps in issues_groups.items():
+        apm_all_groups.setdefault(apm, set()).update(grps)
+    after_1f = sum(1 for v in apm_all_groups.values() if v)
+    print(f"   Stage 1f added groups to {after_1f - before_1f} previously empty APMs")
+
     # 5. Strict AD→MAR verification — use fast token-indexed version if index built
     mar_df_for_verification = mar_dataframes[0] if mar_dataframes else None
     if token_index:
@@ -1031,12 +1235,31 @@ def main() -> None:
     ab_links, ab_types = load_ab_links(df)
 
     # 8. APM Universe (uar_apm_enriched) — run against MAR to find new findings
-    existing_apm_ids = {str(a["apm_id"]) for _, a in df.iterrows()} if not df.empty else set()
+    # Query vw_unified_findings directly for ALL active UAR APM IDs (not just enriched ones).
+    # Normalise legacy numeric IDs (e.g. "8623") to "APM0008623" so they match uar_apm_enriched.
+    print("Loading all active UAR APM IDs from vw_unified_findings...")
+    _uf_ids_sql = f"""
+    SELECT DISTINCT ssp_apm_id
+    FROM `{PROJECT}.sse_data_lake.vw_unified_findings`
+    WHERE ssp_apm_id IS NOT NULL
+      AND norm_status = 'Active'
+      AND UPPER(COALESCE(title, '')) LIKE '%UAR%'
+    """
+    _uf_rows = list(_bq().query(_uf_ids_sql).result())
+    existing_apm_ids = {_normalise_apm(r.ssp_apm_id) for r in _uf_rows}
+    print(f"   {len(existing_apm_ids)} unique APM IDs (normalised) have active UAR findings")
+    # Merge all extra groups (Stages 1e + 1f) for Universe enrichment
+    all_extra_groups: dict[str, set[str]] = {}
+    for src in (ap_groups, issues_groups):
+        for apm, grps in src.items():
+            all_extra_groups.setdefault(apm, set()).update(grps)
+
     apm_universe = load_apm_universe(
         mar_ent_counts=mar_ent_counts,
         token_index=token_index,
         mar_df=mar_dataframes[0] if mar_dataframes else None,
         existing_apm_ids=existing_apm_ids,
+        extra_ad_groups=all_extra_groups,
     )
 
     # 9. Build final APM list
@@ -1065,6 +1288,35 @@ def main() -> None:
     print(f"  Needs Work (0%):   {needs_work}")
     print(f"  Past Due:          {past_due}")
     print(f"  Quarter:           {current_quarter}")
+
+    # Phase 1 — Risk Scoring
+    try:
+        from coc_risk_scorer import score_findings, summarize_risk, top_risks
+        _risk_df = pd.DataFrame(apm_list)
+        # Map sens_level → is_high_sensitivity for scorer
+        _risk_df["sensitivity"] = _risk_df.get("sens_level", "").apply(
+            lambda s: "High" if str(s).lower() in ("high", "critical", "restricted") else ""
+        )
+        _risk_df = score_findings(_risk_df, history=history if "history" in dir() else None)
+        # Write scores back into apm_list dicts
+        for i, row in _risk_df.iterrows():
+            apm_list[i]["risk_score"] = int(row["risk_score"])
+            apm_list[i]["risk_tier"]  = str(row["risk_tier"])
+            apm_list[i]["risk_color"] = str(row["risk_color"])
+        _risk_summary = summarize_risk(_risk_df)
+        print()
+        print("Risk Summary (Phase 1):")
+        print(f"  Critical:  {_risk_summary['critical']}")
+        print(f"  High:      {_risk_summary['high']}")
+        print(f"  Medium:    {_risk_summary['medium']}")
+        print(f"  Low:       {_risk_summary['low']}")
+        print(f"  Avg Score: {_risk_summary['avg_score']}")
+        print()
+        print("Top 5 Highest Risk Findings:")
+        for _, _r in top_risks(_risk_df, n=5).iterrows():
+            print(f"  [{_r['risk_tier']:8s} {_r['risk_score']:3d}]  {_r.get('apm', _r.get('title',''))}")
+    except Exception as _e:
+        print(f"[risk scorer] Skipped: {_e}")
 
     # 10. Update daily history snapshot
     today_str = datetime.date.today().isoformat()

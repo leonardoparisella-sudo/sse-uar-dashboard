@@ -1,0 +1,139 @@
+# ================================================================
+# SSE UAR Dashboard — Looper CI/CD Pipeline
+# Phase 6: Automated Scheduling
+#
+# Purpose: Runs build_dashboard.py on a daily schedule (M-F 6am CT)
+#          and deploys the output to GitHub Pages.
+#
+# Prerequisites:
+#   - Looper access for the sse-compliance pipeline
+#   - GCP Service Account JSON in Looper secrets
+#   - GitHub token for gecgithub01.walmart.com in Looper secrets
+#   - MAR files on a network share accessible to the Looper agent,
+#     OR Phase 5 (SailPoint API) must be complete to eliminate MAR dependency
+#
+# Contact: SSE Compliance Team
+# ================================================================
+
+name: sse-uar-dashboard-refresh
+version: "1.0"
+description: "Daily refresh of the SSE UAR Findings Dashboard"
+
+# ── Schedule ──────────────────────────────────────────────────────
+schedule:
+  cron: "0 12 * * 1-5"   # 12:00 UTC = 06:00 AM Central, Monday–Friday
+  timezone: "America/Chicago"
+
+# ── Environment ──────────────────────────────────────────────────
+environment:
+  # BigQuery auth — use service account JSON stored in Looper secrets
+  GOOGLE_APPLICATION_CREDENTIALS: "/secrets/sse-bq-service-account.json"
+
+  # Phase 4 (AuditBoard) — set after GRC provides service account key
+  # AUDITBOARD_API_KEY: "${{ secrets.AUDITBOARD_API_KEY }}"
+
+  # Phase 5 (SailPoint) — set after IAM team provides credentials
+  # SAILPOINT_TENANT_URL:    "https://walmart.identitynow.com"
+  # SAILPOINT_CLIENT_ID:     "${{ secrets.SAILPOINT_CLIENT_ID }}"
+  # SAILPOINT_CLIENT_SECRET: "${{ secrets.SAILPOINT_CLIENT_SECRET }}"
+
+  # Notifications
+  # TEAMS_WEBHOOK_URL: "${{ secrets.SSE_TEAMS_WEBHOOK_UAR }}"
+
+  # Python package registry (Walmart Artifactory)
+  PIP_INDEX_URL: "https://walmart.artifactoryonline.com/walmart/api/pypi/pypi/simple"
+
+# ── Pipeline Steps ────────────────────────────────────────────────
+steps:
+
+  - name: checkout-pipeline-repo
+    uses: git/checkout@v1
+    with:
+      repo:   "gecgithub01.walmart.com/lparise/sse-uar-pipeline"
+      branch: "main"
+
+  - name: install-dependencies
+    run: |
+      pip install \
+        google-cloud-bigquery==3.* \
+        pandas==2.* \
+        --index-url "${PIP_INDEX_URL}" \
+        --quiet
+
+  - name: verify-environment
+    run: |
+      python -c "
+      import google.cloud.bigquery, pandas
+      print('[check] google-cloud-bigquery:', google.cloud.bigquery.__version__)
+      print('[check] pandas:', pandas.__version__)
+      print('[check] BQ credentials:', '${GOOGLE_APPLICATION_CREDENTIALS}')
+      "
+
+  - name: refresh-dashboard
+    run: |
+      echo "[pipeline] Starting dashboard refresh at $(date -u)"
+      py build_dashboard.py
+      echo "[pipeline] Dashboard refresh complete"
+      ls -lh sse_uar_dashboard.html
+
+  - name: checkout-pages-repo
+    uses: git/checkout@v1
+    with:
+      repo:   "gecgithub01.walmart.com/lparise/sse-uar-dashboard"
+      branch: "baseline"
+      path:   "../sse-uar-dashboard"
+
+  - name: deploy-to-github-pages
+    run: |
+      cp sse_uar_dashboard.html ../sse-uar-dashboard/sse_uar_dashboard.html
+
+      cd ../sse-uar-dashboard
+      git config user.email "looper-bot@walmart.com"
+      git config user.name  "Looper Bot (SSE UAR Pipeline)"
+
+      git add sse_uar_dashboard.html
+      git commit -m "chore: automated UAR dashboard refresh $(date +%Y-%m-%d)"
+
+      git push origin baseline
+
+      # Sync to master (GitHub Pages serves from baseline, master mirrors it)
+      git checkout master
+      git pull origin baseline
+      git push origin master
+
+      echo "[deploy] Dashboard deployed to GitHub Pages"
+      echo "[deploy] URL: https://gecgithub01.walmart.com/pages/lparise/sse-uar-dashboard/sse_uar_dashboard.html"
+
+  # Phase 3 (optional): Send owner notifications after refresh
+  # Uncomment when NotificationEngine is approved for live use
+  # - name: send-notifications
+  #   run: |
+  #     py -c "
+  #     import pandas as pd
+  #     from coc_notifier import NotificationEngine, load_owner_map_from_bq
+  #     owner_map = load_owner_map_from_bq()
+  #     # records_df would be loaded from BQ snapshot here
+  #     engine = NotificationEngine(
+  #         teams_webhook='${TEAMS_WEBHOOK_URL}',
+  #         dry_run=False
+  #     )
+  #     print('[notify] Notification run complete')
+  #     "
+
+  - name: notify-on-failure
+    if: failure()
+    run: |
+      echo "[FAILURE] SSE UAR pipeline failed at $(date -u)"
+      # TODO: Send Teams alert to #sse-uar-alerts channel
+      # curl -H "Content-Type: application/json" \
+      #      -d "{\"text\": \"🔴 SSE UAR Pipeline FAILED - $(date)\"}" \
+      #      "${TEAMS_WEBHOOK_URL}"
+
+# ── Notifications (pipeline-level) ───────────────────────────────
+notifications:
+  on_failure:
+    channel: "#sse-security-alerts"   # Update with actual Slack/Teams channel
+    message: "SSE UAR Dashboard refresh pipeline FAILED"
+  on_success:
+    channel: "#sse-security-ops"
+    message: "SSE UAR Dashboard refreshed successfully"
